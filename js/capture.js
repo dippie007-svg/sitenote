@@ -268,8 +268,8 @@ function renderPhotoThumbs() {
     wrap.className = 'photo-thumb-wrap';
     wrap.innerHTML = `
       <img src="${p.dataUrl}" class="photo-thumb" alt="photo">
-      <button class="photo-remove-btn" data-id="${p.id}">✕</button>
-      ${p.originalUrl ? `<a class="photo-save-btn" href="${p.originalUrl}" download="SiteNote-${Date.now()}.jpg" title="Save to device">⬇</a>` : ''}
+      <button class="photo-remove-btn" title="Remove">✕</button>
+      <button class="photo-save-btn" title="Save to device">⬇</button>
     `;
     wrap.querySelector('.photo-remove-btn').addEventListener('click', async () => {
       if (p.id && p.id.startsWith('new-')) {
@@ -281,8 +281,34 @@ function renderPhotoThumbs() {
       }
       renderPhotoThumbs();
     });
+    wrap.querySelector('.photo-save-btn').addEventListener('click', () => savePhotoToDevice(p));
     container.appendChild(wrap);
   });
+}
+
+async function savePhotoToDevice(photo) {
+  const srcUrl = photo.originalUrl || photo.dataUrl;
+  const filename = `SiteNote-${Date.now()}.jpg`;
+  try {
+    // Convert dataUrl to Blob
+    const res = await fetch(srcUrl);
+    const blob = await res.blob();
+    const file = new File([blob], filename, { type: 'image/jpeg' });
+    // Try Web Share API (Android: allows Save to Gallery)
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'SiteNote Photo' });
+      return;
+    }
+    // Fallback: trigger download to Downloads folder
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch(e) {
+    if (e.name !== 'AbortError') showToast('Could not save photo', 'error');
+  }
 }
 
 function initSevButtons() {
@@ -301,13 +327,15 @@ async function handlePhotoSelect(e) {
   const maxPx = PHOTO_MAX[settings?.reportPrefs?.photoSize || 'medium'];
   for (const file of files) {
     // Store resized copy in app for reports + original for download
-    const dataUrl = await resizeImage(file, maxPx, 0.7);
+    const { dataUrl, w: imgW, h: imgH } = await resizeImage(file, maxPx, 0.7);
     const originalUrl = await fileToDataUrl(file);
     const photo = {
       id: `new-${generateId()}`,
       itemId: editingItem.id,
       jobId: job.id,
       dataUrl,
+      imgW,
+      imgH,
       originalUrl,
       includeInReport: true,
       createdAt: Date.now()

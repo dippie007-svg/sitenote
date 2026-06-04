@@ -53,7 +53,8 @@ export function resizeImage(file, maxPx, quality = 0.7) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      // Return dataUrl AND pixel dimensions so PDF can use correct aspect ratio
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality), w, h });
     };
     img.onerror = reject;
     img.src = url;

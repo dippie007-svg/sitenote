@@ -295,17 +295,22 @@ export function initReviewPanel() {
   document.getElementById('review-edit-photo-btn').addEventListener('click', () => {
     document.getElementById('review-edit-photo-input').click();
   });
+  document.getElementById('review-edit-camera-btn').addEventListener('click', () => {
+    document.getElementById('review-edit-camera-input').click();
+  });
 
-  document.getElementById('review-edit-photo-input').addEventListener('change', async e => {
+  async function handleReviewPhotos(e) {
     const files = Array.from(e.target.files);
     const maxPx = { large: 900, medium: 600, small: 400 }[settings?.reportPrefs?.photoSize || 'medium'];
     for (const file of files) {
-      const dataUrl = await resizeImage(file, maxPx, 0.7);
-      editPanelPhotos.push({ id: `new-${generateId()}`, itemId: editPanelItem.id, jobId: job.id, dataUrl, includeInReport: true });
+      const { dataUrl, w: imgW, h: imgH } = await resizeImage(file, maxPx, 0.7);
+      editPanelPhotos.push({ id: `new-${generateId()}`, itemId: editPanelItem.id, jobId: job.id, dataUrl, imgW, imgH, includeInReport: true });
     }
     renderEditPhotos();
     e.target.value = '';
-  });
+  }
+  document.getElementById('review-edit-photo-input').addEventListener('change', handleReviewPhotos);
+  document.getElementById('review-edit-camera-input').addEventListener('change', handleReviewPhotos);
 
   document.querySelectorAll('.review-sev-btn').forEach(btn => {
     btn.addEventListener('click', () => {

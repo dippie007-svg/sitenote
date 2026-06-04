@@ -155,13 +155,11 @@ export async function generatePDF(jobId) {
   // Photos flow naturally to next page if needed
   const ITEM_MIN_H = 20;
 
-  function imgDims(dataUrl) {
-    return new Promise(resolve => {
-      const img = new Image();
-      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-      img.onerror = () => resolve({ w: 1, h: 1 });
-      img.src = dataUrl;
-    });
+  function getPhotoDims(photo) {
+    // Use stored dimensions (set at capture time) — no async Image loading needed
+    if (photo.imgW && photo.imgH) return { w: photo.imgW, h: photo.imgH };
+    // Fallback for old photos without stored dimensions
+    return { w: 4, h: 3 }; // assume landscape 4:3
   }
 
   for (let ri = 0; ri < rooms.length; ri++) {
@@ -214,14 +212,18 @@ export async function generatePDF(jobId) {
       const shown = itemPhotos.slice(0, 6);
       const extra = itemPhotos.length - shown.length;
 
-      // Await all image dimensions so aspect ratio is correct
-      const dims = await Promise.all(shown.map(p => imgDims(p.dataUrl)));
-
+      // Get dimensions from stored values — synchronous, works on all platforms
       const calcH = (i) => {
-        const d = dims[i];
-        if (!d || !d.w) return maxImgH;
+        const d = getPhotoDims(shown[i]);
         return Math.min(maxImgH, Math.round((d.h / d.w) * colW));
       };
+
+      const rowH0 = maxImgH + 10; // worst-case row height
+      const rowsNeeded = Math.min(3, Math.ceil(shown.length / 2));
+      // If fewer than rowsNeeded rows fit on current page, start a fresh page
+      if (shown.length > 0 && y + rowsNeeded * rowH0 > ph - mt) {
+        doc.addPage(); y = mt;
+      }
 
       for (let pi = 0; pi < shown.length; pi += 2) {
         const rowH = Math.max(
