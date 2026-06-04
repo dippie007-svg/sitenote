@@ -148,11 +148,10 @@ export async function generatePDF(jobId) {
   doc.addPage();
   y = mt;
 
-  const ROOM_HEAD_H = 22;
-  const colW = (cw - 5) / 2;
-  const maxImgH = 55; // 3 rows of 65mm = 195mm, fits on any page
-  // Only require room for heading + item header + one description line (no photo)
-  // Photos flow naturally to next page if needed
+  const ROOM_HEAD_H = 16;
+  const colW = (cw - 5) / 2;          // max width of a photo column
+  const maxImgH = 45;                 // max photo height — keeps 3 room-blocks per page
+  const ROW_GAP = 8;                  // caption + spacing below each photo row
   const ITEM_MIN_H = 20;
 
   function getPhotoDims(photo) {
@@ -162,14 +161,50 @@ export async function generatePDF(jobId) {
     return { w: 4, h: 3 }; // assume landscape 4:3
   }
 
+  // Compute draw size for a photo, fitting inside colW × maxImgH while
+  // KEEPING its aspect ratio. Returns { w, h } in mm.
+  function fitBox(photo) {
+    const d = getPhotoDims(photo);
+    const ratio = d.w / d.h;            // width / height
+    let drawW = colW;
+    let drawH = drawW / ratio;
+    if (drawH > maxImgH) {              // too tall → constrain by height
+      drawH = maxImgH;
+      drawW = drawH * ratio;
+    }
+    return { w: drawW, h: drawH };
+  }
+
+  // Minimum height to keep an item's header + description + first photo row together
+  function itemKeepHeight(item) {
+    let h = 6; // item header row
+    const desc = item.expandedDescription || item.description || '';
+    setFont('normal', 10, DARK);
+    const lines = doc.splitTextToSize(desc, cw);
+    h += Math.min(lines.length, 4) * 5 + 2; // cap at 4 lines for the keep-together block
+    const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false).slice(0, 6);
+    if (photos.length) {
+      const r0 = Math.max(fitBox(photos[0]).h, photos[1] ? fitBox(photos[1]).h : 0);
+      h += r0 + ROW_GAP;
+    }
+    return h;
+  }
+
   for (let ri = 0; ri < rooms.length; ri++) {
     const room = rooms[ri];
 
+    const roomItems = allItems
+      .filter(i => i.roomId === room.id)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    const code = getRoomCode(room.name);
+
     if (ri > 0) {
-      if (y + ROOM_HEAD_H + ITEM_MIN_H > ph - mt) {
+      // Keep room heading together with its first item's header + first photo
+      const firstNeed = roomItems.length ? itemKeepHeight(roomItems[0]) : ITEM_MIN_H;
+      if (y + ROOM_HEAD_H + firstNeed > ph - mt) {
         doc.addPage(); y = mt;
       } else {
-        y += 8;
+        y += 6;
       }
     }
 
@@ -179,11 +214,6 @@ export async function generatePDF(jobId) {
     doc.text(room.name || 'Unnamed Room', ml, y);
     y += 2; greyRule(y); y += 8;
 
-    const roomItems = allItems
-      .filter(i => i.roomId === room.id)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-    const code = getRoomCode(room.name);
-
     for (let idx = 0; idx < roomItems.length; idx++) {
       const item = roomItems[idx];
       const itemNum = `${code}-${String(idx + 1).padStart(2, '0')}`;
@@ -192,7 +222,9 @@ export async function generatePDF(jobId) {
 
       setFont('normal', 10, DARK);
       const descLines = doc.splitTextToSize(fullDesc, cw);
-      if (y + 6 + (descLines.length > 0 ? 5 : 0) > ph - mt) { doc.addPage(); y = mt; }
+      // Keep item header + description + first photo row together (except first item,
+      // which already moved with the room heading above)
+      if (idx > 0 && y + itemKeepHeight(item) > ph - mt) { doc.addPage(); y = mt; }
 
       setFont('bold', 10, DARK);
       doc.text(`${item.flagged ? '⚑ ' : ''}${itemNum}`, ml, y);
@@ -207,42 +239,31 @@ export async function generatePDF(jobId) {
       });
       y += 2;
 
-      // Photos — 2 per row, correct aspect ratio, max 6
+      // Photos — 2 per row, aspect ratio preserved, max 6
       const itemPhotos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false);
       const shown = itemPhotos.slice(0, 6);
       const extra = itemPhotos.length - shown.length;
 
-      // Get dimensions from stored values — synchronous, works on all platforms
-      const calcH = (i) => {
-        const d = getPhotoDims(shown[i]);
-        return Math.min(maxImgH, Math.round((d.h / d.w) * colW));
-      };
-
-      const rowH0 = maxImgH + 10; // worst-case row height
-      const rowsNeeded = Math.min(3, Math.ceil(shown.length / 2));
-      // If fewer than rowsNeeded rows fit on current page, start a fresh page
-      if (shown.length > 0 && y + rowsNeeded * rowH0 > ph - mt) {
-        doc.addPage(); y = mt;
-      }
-
       for (let pi = 0; pi < shown.length; pi += 2) {
-        const rowH = Math.max(
-          shown[pi]     ? calcH(pi)     : 0,
-          shown[pi + 1] ? calcH(pi + 1) : 0
-        );
-        if (y + rowH + 10 > ph - mt) { doc.addPage(); y = mt; }
+        const boxL = shown[pi]     ? fitBox(shown[pi])     : null;
+        const boxR = shown[pi + 1] ? fitBox(shown[pi + 1]) : null;
+        const rowH = Math.max(boxL ? boxL.h : 0, boxR ? boxR.h : 0);
 
-        [shown[pi], shown[pi + 1]].forEach((photo, ci) => {
-          if (!photo) return;
+        // Break to new page if this row won't fit
+        if (y + rowH + ROW_GAP > ph - mt) { doc.addPage(); y = mt; }
+
+        [[shown[pi], boxL], [shown[pi + 1], boxR]].forEach(([photo, box], ci) => {
+          if (!photo || !box) return;
           try {
-            const h = calcH(pi + ci);
-            const x = ml + ci * (colW + 5);
-            doc.addImage(photo.dataUrl, 'JPEG', x, y, colW, h, '', 'FAST');
+            // Centre the image horizontally within its column slot
+            const slotX = ml + ci * (colW + 5);
+            const x = slotX + (colW - box.w) / 2;
+            doc.addImage(photo.dataUrl, 'JPEG', x, y, box.w, box.h, '', 'FAST');
             setFont('normal', 7, GREY);
-            doc.text(`${itemNum} — Photo ${pi + ci + 1}`, x, y + h + 4);
+            doc.text(`${itemNum} — Photo ${pi + ci + 1}`, slotX, y + rowH + 4);
           } catch(e) {}
         });
-        y += rowH + 10;
+        y += rowH + ROW_GAP;
       }
 
       if (extra > 0) {
