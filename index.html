@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>SiteNote</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a1f2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <!-- jsPDF loaded as UMD so pdf.js can use window.jspdf -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body data-theme="dark">
+
+<div id="app">
+  <!-- ── Sidebar (tablet/desktop) ── -->
+  <nav id="sidebar">
+    <div class="app-logo">📋 SiteNote</div>
+    <nav>
+      <a href="#" data-nav="home" class="active">🏠 Home</a>
+      <a href="#" data-nav="setup" data-nav-new="true">➕ New Job</a>
+      <a href="#" data-nav="capture">📷 Capture</a>
+      <a href="#" data-nav="review">📋 Review</a>
+      <a href="#" data-nav="settings">⚙️ Settings</a>
+    </nav>
+  </nav>
+
+  <!-- ── Main content ── -->
+  <div id="main">
+
+    <!-- ══════════ HOME SCREEN ══════════ -->
+    <section id="screen-home" class="screen active">
+      <div class="screen-header">
+        <h1>Jobs</h1>
+        <div class="header-actions">
+          <button class="btn" id="templates-btn">Templates</button>
+          <button class="btn btn-primary" id="new-job-btn">+ New Job</button>
+        </div>
+      </div>
+      <div id="jobs-list"></div>
+      <div id="jobs-empty" style="display:none">
+        <p>No jobs yet.</p>
+        <button class="btn btn-primary" id="new-job-btn-2">+ New Job</button>
+      </div>
+    </section>
+
+    <!-- ══════════ SETUP SCREEN ══════════ -->
+    <section id="screen-setup" class="screen">
+      <div class="top-bar">
+        <h1 id="setup-title">New Job</h1>
+      </div>
+      <div class="setup-body">
+        <!-- Job fields -->
+        <div id="setup-job-fields">
+          <div class="form-group">
+            <label class="form-label">Project Number</label>
+            <input type="text" id="setup-ref" placeholder="SN-2025-001">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Project *</label>
+            <input type="text" id="setup-client" placeholder="Project name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Property Address</label>
+            <textarea id="setup-address" rows="2" placeholder="123 High Street…"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input type="date" id="setup-date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Report Type</label>
+            <select id="setup-type">
+              <option>Defect Inspection</option>
+              <option>Scope of Works</option>
+              <option>Condition Report</option>
+              <option>Snagging List</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Template name (template mode only) -->
+        <div id="setup-template-name-row" class="form-group" style="display:none">
+          <label class="form-label">Template Name</label>
+          <input type="text" id="setup-template-name" placeholder="e.g. Standard House Survey">
+        </div>
+
+        <!-- Template select (job mode only) -->
+        <div id="setup-template-row" class="form-group" style="display:flex;align-items:center;gap:0.75rem">
+          <label class="form-label" style="margin-bottom:0;white-space:nowrap">Start from template</label>
+          <select id="setup-template-select" style="flex:1">
+            <option value="">Start blank</option>
+          </select>
+        </div>
+
+        <!-- Room list -->
+        <div style="margin-top:1.25rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+            <label class="form-label" style="margin-bottom:0">Rooms</label>
+            <button class="btn btn-sm" id="save-template-btn">Save as template</button>
+          </div>
+          <ul class="rooms-list" id="rooms-list"></ul>
+          <button class="btn btn-sm" id="add-room-btn" style="margin-top:0.5rem;width:100%">+ Add Room</button>
+        </div>
+      </div>
+      <div class="setup-actions">
+        <button class="btn" id="setup-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="setup-start-btn">Start Inspection</button>
+      </div>
+    </section>
+
+    <!-- ══════════ CAPTURE SCREEN ══════════ -->
+    <section id="screen-capture" class="screen">
+      <div class="capture-top">
+        <button class="btn-icon" id="capture-back-btn" aria-label="Back">←</button>
+        <span class="job-info" id="capture-job-info"></span>
+        <span class="progress-text" id="capture-progress-text"></span>
+      </div>
+      <div class="capture-room-header">
+        <h2 id="capture-room-name">Room</h2>
+        <button class="btn btn-sm" id="room-jump-btn">↕ Rooms</button>
+        <button class="btn btn-sm" id="capture-add-room-btn" title="Add room">+ Room</button>
+      </div>
+      <div class="progress-bar-wrap" id="capture-progress-bar"></div>
+      <div id="capture-items-list"></div>
+      <div class="capture-bottom">
+        <button class="btn" id="capture-prev-room">← Prev</button>
+        <button class="btn btn-primary" id="capture-add-item-btn">+ Add Item</button>
+        <button class="btn btn-primary" id="capture-next-room">Next Room →</button>
+      </div>
+
+      <!-- Item panel -->
+      <div id="item-panel">
+        <div class="item-panel-header">
+          <h3>Add Item</h3>
+          <button class="btn-icon" id="item-panel-cancel">✕</button>
+        </div>
+        <div class="item-panel-body">
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <div class="desc-row">
+              <textarea id="item-description" rows="4" placeholder="Describe the defect or item…"></textarea>
+              <button id="item-mic-btn" title="Voice input">🎙</button>
+            </div>
+            <button class="btn btn-sm ai-btn" id="item-ai-btn" style="display:none;margin-top:0.5rem">✦ Expand with AI</button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Photos</label>
+            <input type="file" id="item-photo-input" accept="image/*" capture="environment" multiple style="display:none">
+            <button class="btn btn-sm" id="item-photo-btn">📷 Add Photo</button>
+            <div id="item-photos-container" style="margin-top:0.5rem"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Trade</label>
+            <div id="item-trades-container"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Severity</label>
+            <div class="sev-group">
+              <button class="sev-btn" data-sev="critical">Critical</button>
+              <button class="sev-btn" data-sev="high">High</button>
+              <button class="sev-btn active" data-sev="medium">Medium</button>
+              <button class="sev-btn" data-sev="low">Low</button>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <label class="toggle-label">⚑ Flag this item</label>
+            <label class="toggle"><input type="checkbox" id="item-flagged"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="item-panel-footer">
+          <button class="btn" id="item-panel-cancel2">Cancel</button>
+          <button class="btn btn-primary" id="item-panel-save">Save Item</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ REVIEW SCREEN ══════════ -->
+    <section id="screen-review" class="screen">
+      <div class="review-top">
+        <button class="btn-icon" id="review-back-btn" aria-label="Home">←</button>
+        <span class="job-info" id="review-job-info"></span>
+        <button class="btn btn-primary" id="review-generate-btn">Generate Report</button>
+        <div class="overflow-menu-wrap">
+          <button class="btn btn-sm" id="review-menu-btn">⋮</button>
+          <div id="review-overflow-menu">
+            <button id="review-edit-job-btn">Edit Job Details</button>
+            <button id="review-export-csv-btn">Export as CSV</button>
+          </div>
+        </div>
+      </div>
+      <div class="review-tabs">
+        <button class="review-tab active" id="review-tab-room">By Room</button>
+        <button class="review-tab" id="review-tab-trade">By Trade</button>
+      </div>
+      <div id="review-list"></div>
+      <div id="review-summary"></div>
+
+      <!-- Edit panel -->
+      <div id="review-edit-panel">
+        <div class="item-panel-header">
+          <h3>Edit Item</h3>
+          <button class="btn-icon" id="review-edit-panel-cancel">✕</button>
+        </div>
+        <div class="item-panel-body">
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="review-edit-desc" rows="4"></textarea>
+            <button class="btn btn-sm ai-btn" id="review-edit-ai-btn" style="display:none;margin-top:0.5rem">✦ Expand with AI</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Photos</label>
+            <input type="file" id="review-edit-photo-input" accept="image/*" multiple style="display:none">
+            <button class="btn btn-sm" id="review-edit-photo-btn">📷 Add Photo</button>
+            <div id="review-edit-photos" style="margin-top:0.5rem"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Trade</label>
+            <div id="review-edit-trades"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Severity</label>
+            <div class="sev-group">
+              <button class="review-sev-btn sev-btn" data-sev="critical">Critical</button>
+              <button class="review-sev-btn sev-btn" data-sev="high">High</button>
+              <button class="review-sev-btn sev-btn active" data-sev="medium">Medium</button>
+              <button class="review-sev-btn sev-btn" data-sev="low">Low</button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle-label">⚑ Flag this item</label>
+            <label class="toggle"><input type="checkbox" id="review-edit-flagged"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="item-panel-footer">
+          <button class="btn" id="review-edit-panel-cancel2">Cancel</button>
+          <button class="btn btn-primary" id="review-edit-panel-save">Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ REPORT PREVIEW SCREEN ══════════ -->
+    <section id="screen-report-preview" class="screen">
+      <div class="top-bar">
+        <button class="btn-icon" id="preview-back-btn">←</button>
+        <h1>Report Preview</h1>
+        <span class="spacer"></span>
+        <span id="preview-filename" style="font-size:0.75rem;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button class="btn btn-primary btn-sm" id="preview-download-btn">Download</button>
+        <button class="btn btn-sm" id="preview-share-btn">Share</button>
+      </div>
+      <iframe id="preview-iframe" title="Report Preview"></iframe>
+      <div id="preview-fallback">
+        <p>Preview not available on this device.</p>
+        <button class="btn btn-primary" id="preview-download-fallback">Tap Download to open</button>
+      </div>
+      <div class="preview-bottom">
+        <button class="btn" id="preview-back-btn-2">← Back to Review</button>
+        <button class="btn btn-primary" id="preview-complete-btn">✓ Mark as Complete</button>
+      </div>
+    </section>
+
+    <!-- ══════════ SETTINGS SCREEN ══════════ -->
+    <section id="screen-settings" class="screen">
+      <div class="top-bar"><h1>Settings</h1></div>
+      <div class="settings-body">
+
+        <div class="settings-section">
+          <h2>Branding</h2>
+          <div class="form-group">
+            <label class="form-label">Compiled By</label>
+            <input type="text" id="setting-surveyor" placeholder="Your name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="setting-email" placeholder="email@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" id="setting-phone" placeholder="+44 7700 900000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Logo</label>
+            <input type="file" id="logo-upload" accept="image/*">
+            <img id="logo-preview" alt="Logo preview">
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>AI Features</h2>
+          <div class="toggle-row">
+            <span class="toggle-label">Enable AI text expansion</span>
+            <label class="toggle"><input type="checkbox" id="setting-ai-enabled"><span class="toggle-slider"></span></label>
+          </div>
+          <div id="api-key-row" style="display:none;margin-top:0.75rem">
+            <div class="form-group">
+              <label class="form-label">Anthropic API Key</label>
+              <input type="password" id="setting-api-key" placeholder="sk-ant-…">
+              <small style="color:var(--text-muted);font-size:0.8rem">Your key is stored only on this device.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>Trade Categories</h2>
+          <small style="color:var(--text-muted);display:block;margin-bottom:0.75rem">These appear as tags when capturing items on site.</small>
+          <ul class="trades-list" id="trades-list"></ul>
+          <button class="btn btn-sm" id="add-trade-btn">+ Add Trade</button>
+        </div>
+
+        <div class="settings-section">
+          <h2>Report Preferences</h2>
+          <div class="toggle-row">
+            <span class="toggle-label">Include summary table</span>
+            <label class="toggle"><input type="checkbox" id="setting-summary-table" checked><span class="toggle-slider"></span></label>
+          </div>
+          <div class="form-group" style="margin-top:0.75rem">
+            <label class="form-label">Photo Size</label>
+            <select id="setting-photo-size">
+              <option value="large">Large (900px)</option>
+              <option value="medium" selected>Medium (600px)</option>
+              <option value="small">Small (400px)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Page Size</label>
+            <select id="setting-page-size">
+              <option value="a4" selected>A4</option>
+              <option value="letter">Letter</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>Theme</h2>
+          <div class="toggle-row">
+            <span class="toggle-label">Light mode</span>
+            <label class="toggle"><input type="checkbox" id="setting-theme"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>Data Management</h2>
+          <div class="data-actions">
+            <button class="btn" id="export-data-btn">Export all data</button>
+            <button class="btn" id="import-data-btn">Import backup</button>
+            <input type="file" id="import-file-input" accept=".json" style="display:none">
+            <button class="btn btn-danger" id="clear-data-btn">Clear all data</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ── Bottom Nav (mobile) ── -->
+<nav id="bottom-nav">
+  <a href="#" data-nav="home" class="active"><span class="nav-icon">🏠</span>Home</a>
+  <a href="#" data-nav="setup" data-nav-new="true"><span class="nav-icon">➕</span>New Job</a>
+  <a href="#" data-nav="capture"><span class="nav-icon">📷</span>Capture</a>
+  <a href="#" data-nav="review"><span class="nav-icon">📋</span>Review</a>
+  <a href="#" data-nav="settings"><span class="nav-icon">⚙️</span>Settings</a>
+</nav>
+
+<!-- ── Modals ── -->
+<div class="modal-overlay" id="templates-modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Templates</h2>
+      <button class="btn-icon" id="templates-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="templates-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="new-template-btn">+ New Template</button>
+    </div>
+  </div>
+</div>
+
+<div id="room-jump-overlay">
+  <div id="room-jump-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+      <strong>Jump to Room</strong>
+      <button class="btn-icon" id="room-jump-close">✕</button>
+    </div>
+    <div id="room-jump-list"></div>
+  </div>
+</div>
+
+<div id="clear-confirm-modal">
+  <div class="clear-confirm-box">
+    <h3>⚠ Clear all data</h3>
+    <p>This will permanently delete all jobs, items, photos and settings. Type <strong>DELETE</strong> to confirm.</p>
+    <div class="form-group">
+      <input type="text" id="clear-confirm-input" placeholder="Type DELETE">
+    </div>
+    <div class="clear-confirm-actions">
+      <button class="btn" id="clear-cancel-btn">Cancel</button>
+      <button class="btn btn-danger" id="clear-confirm-btn">Clear everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report loading overlay -->
+<div id="report-loading-overlay">
+  <div class="loading-text">Building your report…</div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+</div>
+
+<!-- PWA Install Banner -->
+<div id="install-banner">
+  <span class="install-banner-text">Install SiteNote for offline use</span>
+  <button class="btn btn-primary btn-sm" id="install-btn">Install</button>
+  <button class="btn-icon" id="install-dismiss">✕</button>
+</div>
+
+<script type="module">
+  import { initDB, getSettings } from './js/db.js';
+  import { navigate } from './js/router.js';
+  import { initSettings } from './js/settings.js';
+  import { initJobs } from './js/jobs.js';
+  import { initSetup } from './js/setup.js';
+  import { initCapture } from './js/capture.js';
+  import { initReview, initReviewPanel } from './js/review.js';
+  import { initReportPreview } from './js/report-preview.js';
+
+  // Init DB and apply saved theme, then boot all modules
+  async function boot() {
+    await initDB();
+    const settings = await getSettings();
+    document.body.dataset.theme = settings.theme || 'dark';
+
+  // Init all modules
+  initSettings();
+  initJobs();
+  initSetup();
+  initCapture();
+  initReview();
+  initReviewPanel();
+  initReportPreview();
+
+  // Nav links
+  document.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.preventDefault();
+      if (el.dataset.navNew) {
+        navigate(el.dataset.nav, { jobId: null, mode: null, templateId: null });
+      } else {
+        navigate(el.dataset.nav);
+      }
+    });
+  });
+
+  // Second cancel button in item panel
+  document.getElementById('item-panel-cancel2').addEventListener('click', () => {
+    document.getElementById('item-panel').classList.remove('open');
+  });
+  document.getElementById('review-edit-panel-cancel2')?.addEventListener('click', () => {
+    document.getElementById('review-edit-panel').classList.remove('open');
+  });
+  document.getElementById('preview-download-fallback')?.addEventListener('click', () => {
+    document.getElementById('preview-download-btn').click();
+  });
+
+  // PWA install
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!localStorage.getItem('install-dismissed')) {
+      document.getElementById('install-banner').style.display = 'flex';
+    }
+  });
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    document.getElementById('install-banner').style.display = 'none';
+  });
+  document.getElementById('install-dismiss').addEventListener('click', () => {
+    localStorage.setItem('install-dismissed', '1');
+    document.getElementById('install-banner').style.display = 'none';
+  });
+  } // end boot()
+
+  boot();
+
+  // Service worker (outside boot — register immediately)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(console.error);
+  }
+</script>
+</body>
+</html>
