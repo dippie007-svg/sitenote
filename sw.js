@@ -1,54 +1,42 @@
-const CACHE = 'sitenote-v9';
-const PRECACHE = [
-  './',
-  './index.html',
-  './css/app.css',
-  './manifest.json',
-  './icon-192.svg',
-  './icon-512.svg',
-  './js/db.js',
-  './js/router.js',
-  './js/utils.js',
-  './js/settings.js',
-  './js/jobs.js',
-  './js/setup.js',
-  './js/capture.js',
-  './js/review.js',
-  './js/pdf.js',
-  './js/report-preview.js',
-  './logo-dvm.jpg'
-];
+const CACHE = 'sitenote-v10';
+const STATIC = ['./logo-dvm.jpg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', e => {
-  // Skip non-GET and chrome-extension requests
   if (e.request.method !== 'GET') return;
-  if (e.request.url.startsWith('chrome-extension')) return;
   if (e.request.url.includes('api.anthropic.com')) return;
+  if (e.request.url.includes('fonts.googleapis.com') || e.request.url.includes('fonts.gstatic.com')) {
+    // Cache-first for fonts
+    e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request).then(r => {
+      const clone = r.clone();
+      caches.open(CACHE).then(c => c.put(e.request, clone));
+      return r;
+    })));
+    return;
+  }
 
+  // Network-first for everything else (JS, HTML, CSS)
+  // Always try to get the latest from network, fall back to cache if offline
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const fetchPromise = fetch(e.request).then(response => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
+    fetch(e.request)
+      .then(response => {
+        const clone = response.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
         return response;
-      }).catch(() => null);
-      return cached || fetchPromise;
-    })
+      })
+      .catch(() => caches.match(e.request))
   );
 });
