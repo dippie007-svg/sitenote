@@ -1,4 +1,4 @@
-const CACHE = 'sitenote-v8';
+const CACHE = 'sitenote-v9';
 const PRECACHE = [
   './',
   './index.html',
