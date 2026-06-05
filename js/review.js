@@ -1,4 +1,4 @@
-import { getJob, saveJob, getItemsForJob, saveItem, deleteItem, getPhotosForItem, savePhoto, deletePhoto, getSettings } from './db.js';
+import { getJob, saveJob, getItemsForJob, saveItem, deleteItem, getPhotosForItem, savePhoto, deletePhoto, getSettings, exportJobBundle } from './db.js';
 import { navigate } from './router.js';
 import { generateId, showToast, resizeImage, getRoomCode } from './utils.js';
 import { isAIEnabled } from './settings.js';
@@ -21,6 +21,17 @@ export function initReview() {
     navigate('setup', { jobId: job.id });
   });
   document.getElementById('review-export-csv-btn').addEventListener('click', () => { toggleOverflowMenu(); exportCSV(); });
+  document.getElementById('review-export-job-btn').addEventListener('click', () => { toggleOverflowMenu(); exportJob(); });
+
+  // Report format choice
+  document.getElementById('format-pdf-btn').addEventListener('click', () => buildReport('pdf'));
+  document.getElementById('format-docx-btn').addEventListener('click', () => buildReport('docx'));
+  document.getElementById('format-modal-close').addEventListener('click', () => {
+    document.getElementById('format-modal-overlay').style.display = 'none';
+  });
+  document.getElementById('format-modal-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
 
   document.addEventListener('screen-shown', async e => {
     if (e.detail.screen !== 'review') return;
@@ -373,12 +384,24 @@ async function expandWithAI(item, inPanel = false) {
   }
 }
 
-async function handleGenerateReport() {
+function handleGenerateReport() {
   if (!items.length) { showToast('No items to include in report', 'error'); return; }
+  // Ask which format
+  document.getElementById('format-modal-overlay').style.display = 'flex';
+}
+
+async function buildReport(format) {
+  document.getElementById('format-modal-overlay').style.display = 'none';
   const overlay = document.getElementById('report-loading-overlay');
   overlay.style.display = 'flex';
   try {
-    const result = await generatePDF(job.id);
+    let result;
+    if (format === 'docx') {
+      const { generateDOCX } = await import('./docx-report.js');
+      result = await generateDOCX(job.id);
+    } else {
+      result = await generatePDF(job.id);
+    }
     window.appState.reportBlob = result.blob;
     window.appState.reportFilename = result.filename;
     navigate('report-preview');
@@ -387,6 +410,23 @@ async function handleGenerateReport() {
     showToast(`Report error: ${err && err.message ? err.message : err}`, 'error');
   } finally {
     overlay.style.display = 'none';
+  }
+}
+
+async function exportJob() {
+  try {
+    const bundle = await exportJobBundle(job.id);
+    const json = JSON.stringify(bundle);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const ref = (job.reference || 'job').replace(/[^a-zA-Z0-9-]/g, '-');
+    const a = document.createElement('a');
+    a.href = url; a.download = `SiteNoteJob-${ref}.sitenote.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+    showToast('Job exported — transfer the file to your PC and import it', 'success');
+  } catch (err) {
+    showToast(`Export failed: ${err.message}`, 'error');
   }
 }
 

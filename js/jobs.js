@@ -1,4 +1,4 @@
-import { getAllJobs, deleteJob, getAllTemplates, saveTemplate, deleteTemplate, getItemsForJob } from './db.js';
+import { getAllJobs, deleteJob, getAllTemplates, saveTemplate, deleteTemplate, getItemsForJob, importJobBundle } from './db.js';
 import { navigate } from './router.js';
 import { showToast, generateId } from './utils.js';
 
@@ -15,6 +15,25 @@ export function initJobs() {
   document.getElementById('new-template-btn').addEventListener('click', () => {
     closeTemplatesModal();
     navigate('setup', { mode: 'template' });
+  });
+
+  // Import a job bundle exported from another device
+  document.getElementById('import-job-btn').addEventListener('click', () => {
+    document.getElementById('import-job-input').click();
+  });
+  document.getElementById('import-job-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      const jobId = await importJobBundle(bundle);
+      showToast('Job imported successfully', 'success');
+      loadJobs();
+    } catch (err) {
+      showToast(`Import failed: ${err.message}`, 'error');
+    }
+    e.target.value = '';
   });
 
   document.addEventListener('screen-shown', e => {

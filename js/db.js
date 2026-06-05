@@ -197,6 +197,23 @@ export async function getAllTemplates() { return getAll('templates'); }
 export async function saveTemplate(template) { await put('templates', template); }
 export async function deleteTemplate(id) { await del('templates', id); }
 
+// Export a single job bundle (job + its items + photos) for transfer to another device
+export async function exportJobBundle(jobId) {
+  const job = await getOne('jobs', jobId);
+  const items = await getAllByIndex('items', 'jobId', jobId);
+  const photos = await getAllByIndex('photos', 'jobId', jobId);
+  return { type: 'sitenote-job', version: 1, job, items, photos };
+}
+
+// Import a single job bundle (merge — overwrites by id, does NOT clear other data)
+export async function importJobBundle(bundle) {
+  if (!bundle || !bundle.job) throw new Error('Not a valid SiteNote job file');
+  await put('jobs', bundle.job);
+  for (const it of (bundle.items || [])) await put('items', it);
+  for (const ph of (bundle.photos || [])) await put('photos', ph);
+  return bundle.job.id;
+}
+
 export async function exportAllData() {
   const [jobs, items, photos, templates, settings] = await Promise.all([
     getAll('jobs'), getAll('items'), getAll('photos'), getAll('templates'), getAll('settings')
