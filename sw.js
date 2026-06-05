@@ -1,4 +1,4 @@
-const CACHE = 'sitenote-v13';
+const CACHE = 'sitenote-v14';
 const STATIC = ['./logo-dvm.jpg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
