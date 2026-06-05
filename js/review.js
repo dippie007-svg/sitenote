@@ -301,6 +301,17 @@ export function initReviewPanel() {
 
   async function handleReviewPhotos(e) {
     const files = Array.from(e.target.files);
+    // Save full-res originals to device first (within user gesture)
+    files.forEach(file => {
+      try {
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        const ext = (file.name || '').split('.').pop() || 'jpg';
+        a.href = url; a.download = `SiteNote-${Date.now()}.${ext}`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 8000);
+      } catch(err) { console.warn('Gallery backup failed:', err); }
+    });
     const maxPx = { large: 900, medium: 600, small: 400 }[settings?.reportPrefs?.photoSize || 'medium'];
     for (const file of files) {
       const { dataUrl, w: imgW, h: imgH } = await resizeImage(file, maxPx, 0.7);

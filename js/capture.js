@@ -269,7 +269,6 @@ function renderPhotoThumbs() {
     wrap.innerHTML = `
       <img src="${p.dataUrl}" class="photo-thumb" alt="photo">
       <button class="photo-remove-btn" title="Remove">✕</button>
-      <button class="photo-save-btn" title="Save to device">⬇</button>
     `;
     wrap.querySelector('.photo-remove-btn').addEventListener('click', async () => {
       if (p.id && p.id.startsWith('new-')) {
@@ -281,34 +280,8 @@ function renderPhotoThumbs() {
       }
       renderPhotoThumbs();
     });
-    wrap.querySelector('.photo-save-btn').addEventListener('click', () => savePhotoToDevice(p));
     container.appendChild(wrap);
   });
-}
-
-async function savePhotoToDevice(photo) {
-  const srcUrl = photo.originalUrl || photo.dataUrl;
-  const filename = `SiteNote-${Date.now()}.jpg`;
-  try {
-    // Convert dataUrl to Blob
-    const res = await fetch(srcUrl);
-    const blob = await res.blob();
-    const file = new File([blob], filename, { type: 'image/jpeg' });
-    // Try Web Share API (Android: allows Save to Gallery)
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'SiteNote Photo' });
-      return;
-    }
-    // Fallback: trigger download to Downloads folder
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  } catch(e) {
-    if (e.name !== 'AbortError') showToast('Could not save photo', 'error');
-  }
 }
 
 function initSevButtons() {
@@ -324,11 +297,16 @@ function initSevButtons() {
 async function handlePhotoSelect(e) {
   const files = Array.from(e.target.files);
   if (!files.length) return;
+
+  // 1. Save full-resolution originals to the device immediately, BEFORE any
+  //    async work — this keeps the user-gesture so mobile browsers allow it.
+  files.forEach(file => saveFileToDevice(file));
+
+  // 2. Store a small resized copy in the app DB for the report (NOT the original —
+  //    storing full-res base64 bloats IndexedDB and breaks PDF generation).
   const maxPx = PHOTO_MAX[settings?.reportPrefs?.photoSize || 'medium'];
   for (const file of files) {
-    // Store resized copy in app for reports + original for download
     const { dataUrl, w: imgW, h: imgH } = await resizeImage(file, maxPx, 0.7);
-    const originalUrl = await fileToDataUrl(file);
     const photo = {
       id: `new-${generateId()}`,
       itemId: editingItem.id,
@@ -336,7 +314,6 @@ async function handlePhotoSelect(e) {
       dataUrl,
       imgW,
       imgH,
-      originalUrl,
       includeInReport: true,
       createdAt: Date.now()
     };
@@ -346,13 +323,21 @@ async function handlePhotoSelect(e) {
   e.target.value = '';
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
+// Save the original file to the device's Downloads (appears in Gallery → Download album)
+function saveFileToDevice(file) {
+  try {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    const ext = (file.name || '').split('.').pop() || 'jpg';
+    a.href = url;
+    a.download = `SiteNote-${Date.now()}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  } catch(e) {
+    console.warn('Gallery backup failed:', e);
+  }
 }
 
 function saveOriginalToGallery(file) {
