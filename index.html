@@ -432,7 +432,7 @@
 </div>
 
 <script type="module">
-  import { initDB, getSettings } from './js/db.js';
+  import { initDB, getSettings, migratePhotos } from './js/db.js';
   import { navigate } from './js/router.js';
   import { initSettings } from './js/settings.js';
   import { initJobs } from './js/jobs.js';
@@ -444,6 +444,7 @@
   // Init DB and apply saved theme, then boot all modules
   async function boot() {
     await initDB();
+    await migratePhotos(); // strip legacy full-res originals that break PDF on mobile
     const settings = await getSettings();
     document.body.dataset.theme = settings.theme || 'dark';
 
