@@ -37,7 +37,7 @@ export async function generateDOCX(jobId) {
     photoMap[p.itemId].push(p);
   });
 
-  const AMBER = 'F0A500';
+  const RULE = 'A0A0A0';   // grey separator (matches PDF)
   const DARK = '1A1F2E';
   const GREY = '646464';
 
@@ -104,6 +104,9 @@ export async function generateDOCX(jobId) {
   });
 
   // ─── Rooms ───
+  const PHOTOS_PER_ROW = 3;
+  const PHOTO_W = 175; // px — three fit across an A4 page width
+
   for (const room of (job.rooms || [])) {
     const roomItems = allItems
       .filter(i => i.roomId === room.id)
@@ -113,13 +116,10 @@ export async function generateDOCX(jobId) {
     const code = getRoomCode(room.name);
 
     children.push(new Paragraph({
-      spacing: { before: 240, after: 80 },
-      border: { bottom: { color: AMBER, space: 1, style: BorderStyle.SINGLE, size: 12 } },
+      spacing: { before: 240, after: 120 },
+      border: { bottom: { color: RULE, space: 1, style: BorderStyle.SINGLE, size: 12 } },
       children: [ new TextRun({ text: room.name || 'Unnamed Room', bold: true, size: 28, color: DARK }) ]
     }));
-
-    // Table: Ref | Description | Photos
-    const rows = [ headerRow(D, ['Item', 'Description', 'Photos']) ];
 
     for (let idx = 0; idx < roomItems.length; idx++) {
       const item = roomItems[idx];
@@ -127,43 +127,54 @@ export async function generateDOCX(jobId) {
       const sevLabel = (item.severity || 'medium').toUpperCase();
       const desc = item.expandedDescription || item.description || '';
 
-      // Photo cell content
+      // 1. Item heading line: ref + severity + trade
+      const headBits = [
+        new TextRun({ text: `${item.flagged ? '⚑ ' : ''}${itemNum}`, bold: true, size: 22, color: DARK }),
+        new TextRun({ text: `   [${sevLabel}]`, size: 18, color: GREY })
+      ];
+      if (item.trade) headBits.push(new TextRun({ text: `   ${item.trade}`, size: 18, color: GREY }));
+      children.push(new Paragraph({ spacing: { before: 120, after: 40 }, children: headBits }));
+
+      // 2. Comment / description
+      children.push(new Paragraph({
+        spacing: { after: 80 },
+        children: [ new TextRun({ text: desc, size: 20 }) ]
+      }));
+
+      // 3. Photos side-by-side, up to PHOTOS_PER_ROW per row (borderless table)
       const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false);
-      const photoParas = [];
-      photos.forEach(p => {
-        try {
-          const w = 200;
-          const ratio = (p.imgW && p.imgH) ? (p.imgH / p.imgW) : 0.75;
-          const h = Math.round(w * ratio);
-          photoParas.push(new Paragraph({
-            spacing: { after: 60 },
-            children: [ new ImageRun({ type: 'jpg', data: dataUrlToUint8(p.dataUrl), transformation: { width: w, height: h } }) ]
-          }));
-        } catch (e) {}
-      });
-      if (!photoParas.length) photoParas.push(new Paragraph(''));
+      if (photos.length) {
+        const photoRows = [];
+        for (let pi = 0; pi < photos.length; pi += PHOTOS_PER_ROW) {
+          const slice = photos.slice(pi, pi + PHOTOS_PER_ROW);
+          const cells = slice.map(p => {
+            let para;
+            try {
+              const ratio = (p.imgW && p.imgH) ? (p.imgH / p.imgW) : 0.75;
+              const h = Math.round(PHOTO_W * ratio);
+              para = new Paragraph({ children: [ new ImageRun({ type: 'jpg', data: dataUrlToUint8(p.dataUrl), transformation: { width: PHOTO_W, height: h } }) ] });
+            } catch (e) { para = new Paragraph(''); }
+            return new TableCell({
+              width: { size: Math.floor(100 / PHOTOS_PER_ROW), type: WidthType.PERCENTAGE },
+              borders: noBorders(BorderStyle),
+              children: [ para ]
+            });
+          });
+          // pad row so columns stay aligned
+          while (cells.length < PHOTOS_PER_ROW) {
+            cells.push(new TableCell({ borders: noBorders(BorderStyle), children: [ new Paragraph('') ] }));
+          }
+          photoRows.push(new TableRow({ children: cells }));
+        }
+        children.push(new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: noBorders(BorderStyle),
+          rows: photoRows
+        }));
+      }
 
-      rows.push(new TableRow({ children: [
-        new TableCell({
-          width: { size: 16, type: WidthType.PERCENTAGE },
-          children: [
-            new Paragraph({ children: [ new TextRun({ text: `${item.flagged ? '⚑ ' : ''}${itemNum}`, bold: true, size: 18 }) ] }),
-            new Paragraph({ children: [ new TextRun({ text: sevLabel, size: 16, color: GREY }) ] }),
-            ...(item.trade ? [ new Paragraph({ children: [ new TextRun({ text: item.trade, size: 16, color: GREY }) ] }) ] : [])
-          ]
-        }),
-        new TableCell({
-          width: { size: 44, type: WidthType.PERCENTAGE },
-          children: [ new Paragraph({ children: [ new TextRun({ text: desc, size: 20 }) ] }) ]
-        }),
-        new TableCell({
-          width: { size: 40, type: WidthType.PERCENTAGE },
-          children: photoParas
-        })
-      ] }));
+      children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
     }
-
-    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
   }
 
   const doc = new Document({
@@ -181,18 +192,5 @@ export async function generateDOCX(jobId) {
 
 function noBorders(BorderStyle) {
   const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-  return { top: none, bottom: none, left: none, right: none };
-}
-
-function headerRow(D, labels) {
-  const { TableRow, TableCell, Paragraph, TextRun, WidthType } = D;
-  const sizes = [16, 44, 40];
-  return new TableRow({
-    tableHeader: true,
-    children: labels.map((l, i) => new TableCell({
-      width: { size: sizes[i], type: WidthType.PERCENTAGE },
-      shading: { fill: '1A1F2E' },
-      children: [ new Paragraph({ children: [ new TextRun({ text: l, bold: true, color: 'FFFFFF', size: 18 }) ] }) ]
-    }))
-  });
+  return { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none };
 }
