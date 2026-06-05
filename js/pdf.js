@@ -156,134 +156,135 @@ export async function generatePDF(jobId) {
   doc.addPage();
   y = mt;
 
-  const ROOM_HEAD_H = 16;
   const colW = (cw - 5) / 2;          // max width of a photo column
-  const maxImgH = 45;                 // max photo height — keeps 3 room-blocks per page
-  const ROW_GAP = 8;                  // caption + spacing below each photo row
-  const ITEM_MIN_H = 20;
+  const MAX_IMG_H = 64;               // upper cap on photo height
+  const MIN_IMG_H = 28;               // never shrink photos below this
+  const ROW_GAP = 10;                 // caption + spacing below each photo row
+  const HEAD_BLOCK = 13;              // room heading text + rule + spacing
+  const ITEM_HEADER = 6;              // item number / trade-severity line
+  const ITEM_TRAILER = 8;             // spacing + thin rule after an item
+  const PRE_ROOM = 6;                 // spacing before a room heading (mid-page)
+  const PAGE_BOTTOM = ph - mt;
+  const PAGE_TOP = mt;
+  const USABLE = PAGE_BOTTOM - PAGE_TOP;
+  const SAFETY = 6;                   // guard so estimation never overflows
 
   function getPhotoDims(photo) {
-    // Use stored dimensions (set at capture time) — no async Image loading needed
     if (photo.imgW && photo.imgH) return { w: photo.imgW, h: photo.imgH };
-    // Fallback for old photos without stored dimensions
-    return { w: 4, h: 3 }; // assume landscape 4:3
+    return { w: 4, h: 3 }; // fallback: landscape 4:3
   }
-
-  // Compute draw size for a photo, fitting inside colW × maxImgH while
-  // KEEPING its aspect ratio. Returns { w, h } in mm.
-  function fitBox(photo) {
+  // Fit a photo inside colW × capH preserving aspect ratio
+  function fitBox(photo, capH) {
     const d = getPhotoDims(photo);
-    const ratio = d.w / d.h;            // width / height
-    let drawW = colW;
-    let drawH = drawW / ratio;
-    if (drawH > maxImgH) {              // too tall → constrain by height
-      drawH = maxImgH;
-      drawW = drawH * ratio;
-    }
+    const ratio = d.w / d.h;
+    let drawW = colW, drawH = colW / ratio;
+    if (drawH > capH) { drawH = capH; drawW = capH * ratio; }
     return { w: drawW, h: drawH };
   }
 
-  // Minimum height to keep an item's header + description + first photo row together
-  function itemKeepHeight(item) {
-    let h = 6; // item header row
-    const desc = item.expandedDescription || item.description || '';
-    setFont('normal', 10, DARK);
-    const lines = doc.splitTextToSize(desc, cw);
-    h += Math.min(lines.length, 4) * 5 + 2; // cap at 4 lines for the keep-together block
-    const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false).slice(0, 6);
-    if (photos.length) {
-      const r0 = Math.max(fitBox(photos[0]).h, photos[1] ? fitBox(photos[1]).h : 0);
-      h += r0 + ROW_GAP;
-    }
-    return h;
-  }
-
-  for (let ri = 0; ri < rooms.length; ri++) {
-    const room = rooms[ri];
-
+  // ─── Build ordered "units" (one per item, room heading glued to first item) ───
+  const units = [];
+  for (const room of rooms) {
     const roomItems = allItems
       .filter(i => i.roomId === room.id)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
     const code = getRoomCode(room.name);
+    roomItems.forEach((item, idx) => {
+      setFont('normal', 10, DARK);
+      const descLines = doc.splitTextToSize(item.expandedDescription || item.description || '', cw);
+      const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false).slice(0, 6);
+      units.push({
+        roomId: room.id,
+        roomName: room.name || 'Unnamed Room',
+        isFirstInRoom: idx === 0,
+        itemNum: `${code}-${String(idx + 1).padStart(2, '0')}`,
+        rightText: [item.trade, `[${(item.severity || 'medium').toUpperCase()}]`].filter(Boolean).join(' '),
+        flagged: !!item.flagged,
+        descLines,
+        textH: ITEM_HEADER + descLines.length * 5 + 2,
+        photos,
+        photoRows: Math.ceil(photos.length / 2)
+      });
+    });
+  }
 
-    if (ri > 0) {
-      // Keep room heading together with its first item's header + first photo
-      const firstNeed = roomItems.length ? itemKeepHeight(roomItems[0]) : ITEM_MIN_H;
-      if (y + ROOM_HEAD_H + firstNeed > ph - mt) {
-        doc.addPage(); y = mt;
-      } else {
-        y += 6;
-      }
+  // ─── Pass 1: pack units into pages, max 3 photo rows per page ───
+  const pages = [];
+  let cur = { units: [], rows: 0 };
+  for (const u of units) {
+    if (cur.units.length > 0 && cur.rows + u.photoRows > 3) {
+      pages.push(cur); cur = { units: [], rows: 0 };
+    }
+    cur.units.push(u);
+    cur.rows += u.photoRows;
+  }
+  if (cur.units.length) pages.push(cur);
+
+  // ─── Pass 2: render each page, sizing photos to fill it exactly ───
+  pages.forEach((page, pIndex) => {
+    if (pIndex > 0) doc.addPage();
+    y = PAGE_TOP;
+
+    // Fixed (non-photo) height consumed on this page
+    let fixedH = 0;
+    page.units.forEach((u, i) => {
+      if (u.isFirstInRoom) fixedH += (i === 0 ? HEAD_BLOCK : PRE_ROOM + HEAD_BLOCK);
+      fixedH += u.textH + ITEM_TRAILER + u.photoRows * ROW_GAP;
+    });
+
+    // Photo height that makes the content fill the page (capped & floored)
+    let photoH = MAX_IMG_H;
+    if (page.rows > 0) {
+      const avail = USABLE - fixedH - SAFETY;
+      photoH = Math.max(MIN_IMG_H, Math.min(MAX_IMG_H, avail / page.rows));
     }
 
-    roomPages[room.id] = doc.internal.getCurrentPageInfo().pageNumber;
+    page.units.forEach((u, i) => {
+      // Room heading
+      if (u.isFirstInRoom) {
+        if (i > 0) y += PRE_ROOM;
+        roomPages[u.roomId] = doc.internal.getCurrentPageInfo().pageNumber;
+        setFont('bold', 14, DARK);
+        doc.text(u.roomName, ml, y);
+        y += 2; greyRule(y); y += 8;
+      }
 
-    setFont('bold', 14, DARK);
-    doc.text(room.name || 'Unnamed Room', ml, y);
-    y += 2; greyRule(y); y += 8;
-
-    for (let idx = 0; idx < roomItems.length; idx++) {
-      const item = roomItems[idx];
-      const itemNum = `${code}-${String(idx + 1).padStart(2, '0')}`;
-      const sevLabel = (item.severity || 'medium').toUpperCase();
-      const fullDesc = item.expandedDescription || item.description || '';
-
-      setFont('normal', 10, DARK);
-      const descLines = doc.splitTextToSize(fullDesc, cw);
-      // Keep item header + description + first photo row together (except first item,
-      // which already moved with the room heading above)
-      if (idx > 0 && y + itemKeepHeight(item) > ph - mt) { doc.addPage(); y = mt; }
-
+      // Item header
       setFont('bold', 10, DARK);
-      doc.text(`${item.flagged ? '⚑ ' : ''}${itemNum}`, ml, y);
+      doc.text(`${u.flagged ? '⚑ ' : ''}${u.itemNum}`, ml, y);
       setFont('normal', 9, GREY);
-      doc.text([item.trade, `[${sevLabel}]`].filter(Boolean).join(' '), pw - mr, y, { align: 'right' });
+      doc.text(u.rightText, pw - mr, y, { align: 'right' });
       y += 6;
 
+      // Description
       setFont('normal', 10, DARK);
-      descLines.forEach(line => {
-        if (y > ph - mt) { doc.addPage(); y = mt; }
-        doc.text(line, ml, y); y += 5;
-      });
+      u.descLines.forEach(line => { doc.text(line, ml, y); y += 5; });
       y += 2;
 
-      // Photos — 2 per row, aspect ratio preserved, max 6
-      const itemPhotos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false);
-      const shown = itemPhotos.slice(0, 6);
-      const extra = itemPhotos.length - shown.length;
-
-      for (let pi = 0; pi < shown.length; pi += 2) {
-        const boxL = shown[pi]     ? fitBox(shown[pi])     : null;
-        const boxR = shown[pi + 1] ? fitBox(shown[pi + 1]) : null;
+      // Photos — 2 per row, aspect preserved, sized to photoH
+      for (let pi = 0; pi < u.photos.length; pi += 2) {
+        const boxL = u.photos[pi]     ? fitBox(u.photos[pi], photoH)     : null;
+        const boxR = u.photos[pi + 1] ? fitBox(u.photos[pi + 1], photoH) : null;
         const rowH = Math.max(boxL ? boxL.h : 0, boxR ? boxR.h : 0);
-
-        // Break to new page if this row won't fit
-        if (y + rowH + ROW_GAP > ph - mt) { doc.addPage(); y = mt; }
-
-        [[shown[pi], boxL], [shown[pi + 1], boxR]].forEach(([photo, box], ci) => {
+        [[u.photos[pi], boxL], [u.photos[pi + 1], boxR]].forEach(([photo, box], ci) => {
           if (!photo || !box) return;
           try {
-            // Centre the image horizontally within its column slot
             const slotX = ml + ci * (colW + 5);
             const x = slotX + (colW - box.w) / 2;
             doc.addImage(photo.dataUrl, 'JPEG', x, y, box.w, box.h, '', 'FAST');
             setFont('normal', 7, GREY);
-            doc.text(`${itemNum} — Photo ${pi + ci + 1}`, slotX, y + rowH + 4);
+            doc.text(`${u.itemNum} — Photo ${pi + ci + 1}`, slotX, y + rowH + 4);
           } catch(e) {}
         });
         y += rowH + ROW_GAP;
       }
 
-      if (extra > 0) {
-        setFont('italic', 8, GREY);
-        doc.text(`(+ ${extra} additional photo${extra > 1 ? 's' : ''})`, ml, y);
-        y += 6;
-      }
-
-      y += 2;
-      if (idx < roomItems.length - 1) { thinRule(y); y += 6; }
-    }
-  }
+      // Thin rule between items in the same room
+      const next = page.units[i + 1];
+      if (next && !next.isFirstInRoom) { y += 2; thinRule(y); y += 6; }
+      else { y += 2; }
+    });
+  });
 
   // ─── Summary table ───
   if (settings.reportPrefs?.summaryTable !== false) {
