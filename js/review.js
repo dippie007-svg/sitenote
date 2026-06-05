@@ -307,7 +307,7 @@ export function initReviewPanel() {
         const url = URL.createObjectURL(file);
         const a = document.createElement('a');
         const ext = (file.name || '').split('.').pop() || 'jpg';
-        a.href = url; a.download = `SiteNote/SiteNote-${Date.now()}.${ext}`;
+        a.href = url; a.download = `SiteNote_${Date.now()}.${ext}`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 8000);
       } catch(err) { console.warn('Gallery backup failed:', err); }

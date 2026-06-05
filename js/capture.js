@@ -323,15 +323,16 @@ async function handlePhotoSelect(e) {
   e.target.value = '';
 }
 
-// Save the original file to the device, in a "SiteNote" subfolder of Downloads
+// Save the original file to the device's Downloads with a consistent SiteNote_
+// prefix (Android Chrome cannot place downloads in a chosen subfolder, so the
+// prefix at least groups all SiteNote photos together when sorted by name).
 function saveFileToDevice(file) {
   try {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     const ext = (file.name || '').split('.').pop() || 'jpg';
-    // Path prefix asks the browser to place the file in Downloads/SiteNote/
     a.href = url;
-    a.download = `SiteNote/SiteNote-${Date.now()}.${ext}`;
+    a.download = `SiteNote_${Date.now()}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
