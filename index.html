@@ -443,6 +443,15 @@
 
   // Init DB and apply saved theme, then boot all modules
   async function boot() {
+    // Request persistent storage so the browser never evicts our IndexedDB data
+    // (jobs, items, photos, settings) when the app is closed or storage is low.
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        const already = await navigator.storage.persisted();
+        if (!already) await navigator.storage.persist();
+      }
+    } catch(e) { /* not supported — ignore */ }
+
     await initDB();
     await migratePhotos(); // strip legacy full-res originals that break PDF on mobile
     const settings = await getSettings();
