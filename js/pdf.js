@@ -1,24 +1,32 @@
 import { getJob, getSettings, getItemsForJob, getAllPhotosForJob } from './db.js';
 import { formatDate, getRoomCode } from './utils.js';
 
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(fallback), ms))
+  ]);
+}
+
 async function loadLogo() {
-  // Returns { dataUrl, w, h } where w/h are natural pixel dimensions
+  // Returns { dataUrl, w, h }. Hardened with timeouts so it can never hang on mobile.
   try {
-    const res = await fetch('./logo-dvm.jpg');
+    const res = await withTimeout(fetch('./logo-dvm.jpg'), 4000, null);
+    if (!res) return null;
     const blob = await res.blob();
-    const dataUrl = await new Promise(resolve => {
+    const dataUrl = await withTimeout(new Promise(resolve => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
-    });
+    }), 4000, null);
     if (!dataUrl) return null;
-    const dims = await new Promise(resolve => {
+    const dims = await withTimeout(new Promise(resolve => {
       const img = new Image();
       img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
       img.onerror = () => resolve({ w: 1, h: 1 });
       img.src = dataUrl;
-    });
+    }), 4000, { w: 1, h: 1 });
     return { dataUrl, ...dims };
   } catch(e) { return null; }
 }
