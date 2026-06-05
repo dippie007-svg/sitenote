@@ -383,8 +383,8 @@ async function handleGenerateReport() {
     window.appState.reportFilename = result.filename;
     navigate('report-preview');
   } catch (err) {
-    showToast(`PDF error: ${err.message}`, 'error');
     console.error(err);
+    alert('Report generation failed:\n' + (err && err.message ? err.message : err));
   } finally {
     overlay.style.display = 'none';
   }

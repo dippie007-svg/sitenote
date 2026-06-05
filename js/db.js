@@ -124,6 +124,26 @@ const DEFAULT_SETTINGS = {
 
 export function initDB() { return openDB(); }
 
+// One-time migration: strip the huge full-res `originalUrl` field that older
+// versions stored on every photo. Leaving it in bloats memory and breaks PDF
+// generation on mobile. Runs quickly and is a no-op once clean.
+export async function migratePhotos() {
+  try {
+    const photos = await getAll('photos');
+    let cleaned = 0;
+    for (const p of photos) {
+      if ('originalUrl' in p) {
+        delete p.originalUrl;
+        await put('photos', p);
+        cleaned++;
+      }
+    }
+    if (cleaned) console.log(`Migrated ${cleaned} photo(s) — removed originalUrl`);
+  } catch(e) {
+    console.warn('Photo migration skipped:', e);
+  }
+}
+
 export async function getSettings() {
   const s = await getOne('settings', 'main');
   if (!s) return { ...DEFAULT_SETTINGS };
