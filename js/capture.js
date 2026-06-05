@@ -323,14 +323,15 @@ async function handlePhotoSelect(e) {
   e.target.value = '';
 }
 
-// Save the original file to the device's Downloads (appears in Gallery → Download album)
+// Save the original file to the device, in a "SiteNote" subfolder of Downloads
 function saveFileToDevice(file) {
   try {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     const ext = (file.name || '').split('.').pop() || 'jpg';
+    // Path prefix asks the browser to place the file in Downloads/SiteNote/
     a.href = url;
-    a.download = `SiteNote-${Date.now()}.${ext}`;
+    a.download = `SiteNote/SiteNote-${Date.now()}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
