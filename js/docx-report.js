@@ -76,10 +76,20 @@ export async function generateDOCX(jobId) {
     rows: [ new TableRow({ children: headerCells }) ]
   }));
 
+  // Helper: full-width horizontal rule (a paragraph with a bottom border)
+  const rule = (color, size, spacing) => new Paragraph({
+    spacing: spacing || { before: 80, after: 80 },
+    border: { bottom: { color, style: BorderStyle.SINGLE, size, space: 1 } },
+    children: []
+  });
+
+  // Grey rule under the header
+  children.push(rule(RULE, 14, { before: 60, after: 160 }));
+
   // ─── Title ───
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { before: 240, after: 120 },
+    spacing: { before: 120, after: 160 },
     children: [ new TextRun({ text: (job.reportType || 'INSPECTION REPORT').toUpperCase(), bold: true, size: 40, color: DARK }) ]
   }));
 
@@ -103,10 +113,15 @@ export async function generateDOCX(jobId) {
     }));
   });
 
-  // ─── Rooms ───
-  const PHOTOS_PER_ROW = 3;
-  const PHOTO_W = 175; // px — three fit across an A4 page width
+  // Grey rule below the project info (closes the cover block)
+  children.push(rule(RULE, 14, { before: 160, after: 80 }));
 
+  // ─── Rooms ───
+  const PHOTOS_PER_ROW = 2;        // match the PDF (2 photos per row)
+  const PHOTO_W = 250;             // px — two fit across an A4 page width
+  const THIN = 'C8C8C8';           // thin separator between items
+
+  let firstRoom = true;
   for (const room of (job.rooms || [])) {
     const roomItems = allItems
       .filter(i => i.roomId === room.id)
@@ -115,11 +130,14 @@ export async function generateDOCX(jobId) {
 
     const code = getRoomCode(room.name);
 
+    // Room heading — bold with grey underline; rooms start on a new page (like PDF)
     children.push(new Paragraph({
-      spacing: { before: 240, after: 120 },
-      border: { bottom: { color: RULE, space: 1, style: BorderStyle.SINGLE, size: 12 } },
+      pageBreakBefore: firstRoom ? true : false,
+      spacing: { before: firstRoom ? 0 : 240, after: 120 },
+      border: { bottom: { color: RULE, space: 1, style: BorderStyle.SINGLE, size: 14 } },
       children: [ new TextRun({ text: room.name || 'Unnamed Room', bold: true, size: 28, color: DARK }) ]
     }));
+    firstRoom = false;
 
     for (let idx = 0; idx < roomItems.length; idx++) {
       const item = roomItems[idx];
@@ -127,21 +145,31 @@ export async function generateDOCX(jobId) {
       const sevLabel = (item.severity || 'medium').toUpperCase();
       const desc = item.expandedDescription || item.description || '';
 
-      // 1. Item heading line: ref + severity + trade
-      const headBits = [
-        new TextRun({ text: `${item.flagged ? '⚑ ' : ''}${itemNum}`, bold: true, size: 22, color: DARK }),
-        new TextRun({ text: `   [${sevLabel}]`, size: 18, color: GREY })
-      ];
-      if (item.trade) headBits.push(new TextRun({ text: `   ${item.trade}`, size: 18, color: GREY }));
-      children.push(new Paragraph({ spacing: { before: 120, after: 40 }, children: headBits }));
+      // 1. Item header row: number (left)  |  trade + [SEVERITY] (right-aligned)
+      children.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: noBorders(BorderStyle),
+        rows: [ new TableRow({ children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: noBorders(BorderStyle),
+            children: [ new Paragraph({ children: [ new TextRun({ text: `${item.flagged ? '⚑ ' : ''}${itemNum}`, bold: true, size: 22, color: DARK }) ] }) ]
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: noBorders(BorderStyle),
+            children: [ new Paragraph({ alignment: AlignmentType.RIGHT, children: [ new TextRun({ text: [item.trade, `[${sevLabel}]`].filter(Boolean).join('   '), size: 18, color: GREY }) ] }) ]
+          })
+        ] }) ]
+      }));
 
       // 2. Comment / description
       children.push(new Paragraph({
-        spacing: { after: 80 },
+        spacing: { before: 40, after: 80 },
         children: [ new TextRun({ text: desc, size: 20 }) ]
       }));
 
-      // 3. Photos side-by-side, up to PHOTOS_PER_ROW per row (borderless table)
+      // 3. Photos side-by-side, 2 per row (borderless table)
       const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false);
       if (photos.length) {
         const photoRows = [];
@@ -160,7 +188,6 @@ export async function generateDOCX(jobId) {
               children: [ para ]
             });
           });
-          // pad row so columns stay aligned
           while (cells.length < PHOTOS_PER_ROW) {
             cells.push(new TableCell({ borders: noBorders(BorderStyle), children: [ new Paragraph('') ] }));
           }
@@ -173,7 +200,12 @@ export async function generateDOCX(jobId) {
         }));
       }
 
-      children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      // 4. Thin grey rule between items (not after the last one)
+      if (idx < roomItems.length - 1) {
+        children.push(rule(THIN, 6, { before: 120, after: 120 }));
+      } else {
+        children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      }
     }
   }
 
