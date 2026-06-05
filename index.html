@@ -17,6 +17,8 @@
   <!-- jsPDF loaded as UMD so pdf.js can use window.jspdf -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- docx (self-hosted) for Word report export — exposes window.docx -->
+  <script src="js/vendor/docx.umd.js"></script>
 </head>
 <body data-theme="dark">
 
@@ -41,10 +43,12 @@
       <div class="screen-header">
         <h1>Jobs</h1>
         <div class="header-actions">
+          <button class="btn" id="import-job-btn">Import Job</button>
           <button class="btn" id="templates-btn">Templates</button>
           <button class="btn btn-primary" id="new-job-btn">+ New Job</button>
         </div>
       </div>
+      <input type="file" id="import-job-input" accept=".json,application/json" style="display:none">
       <div id="jobs-list"></div>
       <div id="jobs-empty" style="display:none">
         <p>No jobs yet.</p>
@@ -198,6 +202,7 @@
           <div id="review-overflow-menu">
             <button id="review-edit-job-btn">Edit Job Details</button>
             <button id="review-export-csv-btn">Export as CSV</button>
+            <button id="review-export-job-btn">Export Job (for PC)</button>
           </div>
         </div>
       </div>
@@ -422,6 +427,20 @@
 <div id="report-loading-overlay">
   <div class="loading-text">Building your report…</div>
   <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+</div>
+
+<!-- Report format choice modal -->
+<div class="modal-overlay" id="format-modal-overlay">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h2>Choose Report Format</h2>
+      <button class="btn-icon" id="format-modal-close">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:0.75rem">
+      <button class="btn btn-primary" id="format-pdf-btn" style="min-height:56px">📄 PDF Report</button>
+      <button class="btn btn-primary" id="format-docx-btn" style="min-height:56px">📝 Word Document (.docx)</button>
+    </div>
+  </div>
 </div>
 
 <!-- PWA Install Banner -->
