@@ -384,7 +384,7 @@ async function handleGenerateReport() {
     navigate('report-preview');
   } catch (err) {
     console.error(err);
-    alert('Report generation failed:\n' + (err && err.message ? err.message : err));
+    showToast(`Report error: ${err && err.message ? err.message : err}`, 'error');
   } finally {
     overlay.style.display = 'none';
   }

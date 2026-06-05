@@ -370,7 +370,11 @@ export async function generatePDF(jobId) {
 
   const reference = (job.reference || 'report').replace(/[^a-zA-Z0-9-]/g, '-');
   const date = job.date || new Date().toISOString().slice(0, 10);
-  const filename = `SiteNote-${reference}-${date}.pdf`;
+  // Add a time stamp (HHMMSS) so every generated report has a UNIQUE filename —
+  // otherwise the phone keeps the old file and re-opens the stale version.
+  const now = new Date();
+  const stamp = `${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+  const filename = `SiteNote-${reference}-${date}-${stamp}.pdf`;
 
   return { blob: doc.output('blob'), filename };
 }
