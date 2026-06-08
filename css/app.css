@@ -400,6 +400,7 @@ select option { background: var(--surface); }
   flex-shrink: 0;
 }
 .capture-room-header h2 { font-size: 1.3rem; font-weight: 700; flex: 1; cursor: pointer; }
+.capture-room-header h2::after { content: ' ✏'; font-size: 0.8rem; opacity: 0.5; }
 
 .progress-bar-wrap { display: flex; gap: 3px; padding: 0.5rem 1rem; flex-shrink: 0; }
 .progress-segment {
