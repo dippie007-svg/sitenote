@@ -20,6 +20,7 @@ export function initCapture() {
   document.getElementById('capture-add-item-btn').addEventListener('click', () => openItemPanel(null));
   document.getElementById('capture-back-btn').addEventListener('click', handleBack);
   document.getElementById('capture-add-room-btn').addEventListener('click', addRoomInPlace);
+  document.getElementById('capture-room-name').addEventListener('click', renameCurrentRoom);
   document.getElementById('room-jump-btn').addEventListener('click', openRoomJump);
   document.getElementById('room-jump-close').addEventListener('click', closeRoomJump);
   document.getElementById('room-jump-overlay').addEventListener('click', e => {
@@ -171,6 +172,21 @@ async function addRoomInPlace() {
   currentRoomIndex = rooms.length - 1;
   renderCapture();
   showToast(`Room "${name.trim()}" added`, 'success');
+}
+
+async function renameCurrentRoom() {
+  if (!rooms.length) return;
+  const room = rooms[currentRoomIndex];
+  const name = prompt('Rename room:', room.name || '');
+  if (name === null) return;            // cancelled
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === room.name) return;
+  room.name = trimmed;
+  job.rooms = rooms;
+  job.updatedAt = Date.now();
+  await saveJob(job);
+  renderCapture();
+  showToast('Room renamed', 'success');
 }
 
 function handleBack() {
