@@ -132,6 +132,7 @@
         <h2 id="capture-room-name">Room</h2>
         <button class="btn btn-sm" id="room-jump-btn">↕ Rooms</button>
         <button class="btn btn-sm" id="capture-add-room-btn" title="Add room">+ Room</button>
+        <button class="btn btn-sm" id="capture-plan-btn" title="Mark room on plan">📍 Plan</button>
       </div>
       <div class="progress-bar-wrap" id="capture-progress-bar"></div>
       <div id="capture-items-list"></div>
@@ -409,6 +410,27 @@
   </div>
 </div>
 
+<!-- Plan / drawing modal -->
+<div id="plan-modal" class="plan-modal">
+  <div class="plan-modal-bar">
+    <strong>Mark on plan: <span id="plan-room-label"></span></strong>
+    <button class="btn-icon" id="plan-close">✕</button>
+  </div>
+  <div class="plan-modal-tools">
+    <input type="file" id="plan-import-input" accept="image/*" style="display:none">
+    <button class="btn btn-sm" id="plan-import-btn">Import drawing</button>
+    <button class="btn btn-sm" id="plan-zoom-out">−</button>
+    <button class="btn btn-sm" id="plan-zoom-in">+</button>
+    <button class="btn btn-sm" id="plan-clear-btn">Clear pin</button>
+    <button class="btn btn-sm btn-primary" id="plan-save-btn">Save</button>
+  </div>
+  <div id="plan-empty" class="plan-empty-msg">No drawing imported yet. Tap “Import drawing” to add a floor plan, then tap on it to mark this room.</div>
+  <div id="plan-stage" class="plan-stage-box">
+    <div id="plan-zoomwrap" class="plan-zoomwrap"></div>
+  </div>
+  <div class="plan-modal-hint">Tap on the drawing to drop a pin for this room. Drag to pan, use −/+ to zoom.</div>
+</div>
+
 <div id="clear-confirm-modal">
   <div class="clear-confirm-box">
     <h3>⚠ Clear all data</h3>
@@ -459,6 +481,7 @@
   import { initCapture } from './js/capture.js';
   import { initReview, initReviewPanel } from './js/review.js';
   import { initReportPreview } from './js/report-preview.js';
+  import { initPlan } from './js/plan.js';
 
   // Init DB and apply saved theme, then boot all modules
   async function boot() {
@@ -484,6 +507,7 @@
   initReview();
   initReviewPanel();
   initReportPreview();
+  initPlan();
 
   // Nav links
   document.querySelectorAll('[data-nav]').forEach(el => {
