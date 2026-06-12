@@ -139,7 +139,7 @@
       <div class="capture-bottom">
         <button class="btn" id="capture-prev-room">← Prev</button>
         <button class="btn btn-primary" id="capture-add-item-btn">+ Add Item</button>
-        <button class="btn btn-primary" id="capture-next-room">Next Room →</button>
+        <button class="btn" id="capture-next-room">Next Room →</button>
       </div>
 
       <!-- Item panel -->
@@ -184,6 +184,10 @@
             <label class="toggle-label">⚑ Flag this item</label>
             <label class="toggle"><input type="checkbox" id="item-flagged"><span class="toggle-slider"></span></label>
           </div>
+          <div class="toggle-row">
+            <label class="toggle-label">✓ Resolved (exclude from report)</label>
+            <label class="toggle"><input type="checkbox" id="item-resolved"><span class="toggle-slider"></span></label>
+          </div>
         </div>
         <div class="item-panel-footer">
           <button class="btn" id="item-panel-cancel2">Cancel</button>
@@ -201,6 +205,7 @@
         <div class="overflow-menu-wrap">
           <button class="btn btn-sm" id="review-menu-btn">⋮</button>
           <div id="review-overflow-menu">
+            <button id="review-add-items-btn">Add / Edit Items</button>
             <button id="review-edit-job-btn">Edit Job Details</button>
             <button id="review-export-csv-btn">Export as CSV</button>
             <button id="review-export-job-btn">Export Job (for PC)</button>
