@@ -2,6 +2,7 @@ import { getJob, saveJob, getItemsForJob, saveItem, deleteItem, getPhotosForItem
 import { navigate } from './router.js';
 import { generateId, showToast, resizeImage, getRoomCode } from './utils.js';
 import { isAIEnabled } from './settings.js';
+import { openPlan } from './plan.js';
 
 let job = null;
 let rooms = [];
@@ -20,6 +21,7 @@ export function initCapture() {
   document.getElementById('capture-add-item-btn').addEventListener('click', () => openItemPanel(null));
   document.getElementById('capture-back-btn').addEventListener('click', handleBack);
   document.getElementById('capture-add-room-btn').addEventListener('click', addRoomInPlace);
+  document.getElementById('capture-plan-btn').addEventListener('click', openPlanForRoom);
   document.getElementById('capture-room-name').addEventListener('click', renameCurrentRoom);
   document.getElementById('room-jump-btn').addEventListener('click', openRoomJump);
   document.getElementById('room-jump-close').addEventListener('click', closeRoomJump);
@@ -172,6 +174,11 @@ async function addRoomInPlace() {
   currentRoomIndex = rooms.length - 1;
   renderCapture();
   showToast(`Room "${name.trim()}" added`, 'success');
+}
+
+function openPlanForRoom() {
+  if (!rooms.length) { showToast('Add a room first', 'error'); return; }
+  openPlan(job, currentRoomIndex, () => { /* marker saved; nothing to refresh here */ });
 }
 
 async function renameCurrentRoom() {

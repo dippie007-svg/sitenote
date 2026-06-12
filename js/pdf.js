@@ -167,7 +167,7 @@ export async function generatePDF(jobId) {
   const PAGE_BOTTOM = ph - mt;
   const PAGE_TOP = mt;
   const USABLE = PAGE_BOTTOM - PAGE_TOP;
-  const SAFETY = 6;                   // guard so estimation never overflows
+  const SAFETY = 0;                   // no bottom gap — fill to the usable edge
 
   function getPhotoDims(photo) {
     if (photo.imgW && photo.imgH) return { w: photo.imgW, h: photo.imgH };
@@ -189,17 +189,27 @@ export async function generatePDF(jobId) {
       .filter(i => i.roomId === room.id)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
     const code = getRoomCode(room.name);
+    // Plan excerpt for this room (shown under the room heading)
+    const EXCERPT_W = 45; // mm
+    let roomExcerpt = null;
+    if (room.excerpt && room.excerptW && room.excerptH) {
+      roomExcerpt = { dataUrl: room.excerpt, w: EXCERPT_W, h: EXCERPT_W * (room.excerptH / room.excerptW) };
+    }
     roomItems.forEach((item, idx) => {
       setFont('normal', 10, DARK);
-      const descLines = doc.splitTextToSize(item.expandedDescription || item.description || '', cw);
+      const rawDesc = item.expandedDescription || item.description || '';
+      const descLines = doc.splitTextToSize(rawDesc, cw);
       const photos = (photoMap[item.id] || []).filter(p => p.includeInReport !== false).slice(0, 6);
       units.push({
         roomId: room.id,
         roomName: room.name || 'Unnamed Room',
         isFirstInRoom: idx === 0,
+        roomExcerpt: idx === 0 ? roomExcerpt : null,
+        singleItemRoom: roomItems.length === 1,
         itemNum: `${code}-${String(idx + 1).padStart(2, '0')}`,
         rightText: [item.trade, `[${(item.severity || 'medium').toUpperCase()}]`].filter(Boolean).join(' '),
         flagged: !!item.flagged,
+        desc: rawDesc,
         descLines,
         textH: ITEM_HEADER + descLines.length * 5 + 2,
         photos,
@@ -220,23 +230,81 @@ export async function generatePDF(jobId) {
   }
   if (cur.units.length) pages.push(cur);
 
-  // ─── Pass 2: render each page, sizing photos to fill it exactly ───
+  // Height of a single drawn photo given its width cap and a height cap (preserves aspect)
+  function photoHeightAt(photo, wCap, hCap) {
+    const d = getPhotoDims(photo);
+    const ratio = d.w / d.h;
+    let w = wCap, h = wCap / ratio;
+    if (h > hCap) { h = hCap; w = hCap * ratio; }
+    return { w, h };
+  }
+  // Every photo is capped at a single column width (lone photos do NOT span full width)
+  const rowWidthCap = () => colW;
+
+  // ── "Beside" layout helpers: single-comment room → comment + photos to the
+  //    right of the location excerpt ──
+  function besideGeom(u) {
+    const ex = u.roomExcerpt;
+    const rx = ml + ex.w + 6;          // right column x
+    const rw = (pw - mr) - rx;          // right column width
+    const colWr = Math.min(rw, colW);   // photo width within the right column
+    return { ex, rx, rw, colWr };
+  }
+  function besideRightHeight(u, hCap) {
+    const { rw, colWr } = besideGeom(u);
+    let h = 6 + doc.splitTextToSize(u.desc, rw).length * 5 + 2;  // header + description
+    for (const p of u.photos) {
+      h += photoHeightAt(p, colWr, hCap).h + ROW_GAP;            // one photo per row
+    }
+    return h;
+  }
+  function besideBlockHeight(u, hCap) {
+    return Math.max(u.roomExcerpt.h, besideRightHeight(u, hCap));
+  }
+  // The first comment of any room with an excerpt renders beside (to the right of) it
+  const isBeside = (u) => u.isFirstInRoom && u.roomExcerpt;
+
+  // Replay the exact vertical advances of the render to measure a page's total
+  // height for a given photo height cap. Mirrors the render loop precisely.
+  function measurePage(page, hCap) {
+    let h = 0;
+    page.units.forEach((u, i) => {
+      if (u.isFirstInRoom) h += (i > 0 ? PRE_ROOM : 0) + 2 + 8;   // heading
+
+      if (isBeside(u)) {
+        // whole item (comment + photos) sits right of the excerpt
+        h += besideBlockHeight(u, hCap);
+      } else {
+        if (u.isFirstInRoom && u.roomExcerpt) h += u.roomExcerpt.h + 4; // excerpt row
+        h += 6;                                                   // item header
+        h += u.descLines.length * 5 + 2;                          // description
+        for (let pi = 0; pi < u.photos.length; pi += 2) {
+          const rowPhotos = [u.photos[pi], u.photos[pi + 1]].filter(Boolean);
+          const wCap = rowWidthCap(rowPhotos);
+          const rowH = Math.max(...rowPhotos.map(p => photoHeightAt(p, wCap, hCap).h));
+          h += rowH + ROW_GAP;
+        }
+      }
+      const next = page.units[i + 1];
+      h += (next && !next.isFirstInRoom) ? 8 : 2;                 // trailer
+    });
+    return h;
+  }
+
+  // ─── Pass 2: render each page, growing photos to fill the page ───
   pages.forEach((page, pIndex) => {
     if (pIndex > 0) doc.addPage();
     y = PAGE_TOP;
 
-    // Fixed (non-photo) height consumed on this page
-    let fixedH = 0;
-    page.units.forEach((u, i) => {
-      if (u.isFirstInRoom) fixedH += (i === 0 ? HEAD_BLOCK : PRE_ROOM + HEAD_BLOCK);
-      fixedH += u.textH + ITEM_TRAILER + u.photoRows * ROW_GAP;
-    });
-
-    // Photo height that makes the content fill the page (capped & floored)
-    let photoH = MAX_IMG_H;
+    // Binary-search the largest photo height cap whose content fits the usable area
+    let photoH = MIN_IMG_H;
     if (page.rows > 0) {
-      const avail = USABLE - fixedH - SAFETY;
-      photoH = Math.max(MIN_IMG_H, Math.min(MAX_IMG_H, avail / page.rows));
+      let lo = MIN_IMG_H, hi = 230;
+      for (let iter = 0; iter < 26; iter++) {
+        const mid = (lo + hi) / 2;
+        if (measurePage(page, mid) <= USABLE - SAFETY) { photoH = mid; lo = mid; }
+        else hi = mid;
+      }
     }
 
     page.units.forEach((u, i) => {
@@ -249,34 +317,75 @@ export async function generatePDF(jobId) {
         y += 2; greyRule(y); y += 8;
       }
 
-      // Item header
-      setFont('bold', 10, DARK);
-      doc.text(`${u.flagged ? '⚑ ' : ''}${u.itemNum}`, ml, y);
-      setFont('normal', 9, GREY);
-      doc.text(u.rightText, pw - mr, y, { align: 'right' });
-      y += 6;
+      if (isBeside(u)) {
+        // ── Single-comment room: excerpt LEFT, comment + photos in the RIGHT column ──
+        const { ex, rx, rw, colWr } = besideGeom(u);
+        const top = y;
+        try {
+          doc.addImage(ex.dataUrl, 'JPEG', ml, top, ex.w, ex.h, '', 'FAST');
+          setFont('bold', 9, DARK);
+          doc.text('Location', ml, top - 2);
+        } catch(e) {}
 
-      // Description
-      setFont('normal', 10, DARK);
-      u.descLines.forEach(line => { doc.text(line, ml, y); y += 5; });
-      y += 2;
-
-      // Photos — 2 per row, aspect preserved, sized to photoH
-      for (let pi = 0; pi < u.photos.length; pi += 2) {
-        const boxL = u.photos[pi]     ? fitBox(u.photos[pi], photoH)     : null;
-        const boxR = u.photos[pi + 1] ? fitBox(u.photos[pi + 1], photoH) : null;
-        const rowH = Math.max(boxL ? boxL.h : 0, boxR ? boxR.h : 0);
-        [[u.photos[pi], boxL], [u.photos[pi + 1], boxR]].forEach(([photo, box], ci) => {
-          if (!photo || !box) return;
+        let ty = top;
+        setFont('bold', 10, DARK);
+        doc.text(`${u.flagged ? '⚑ ' : ''}${u.itemNum}`, rx, ty);
+        setFont('normal', 9, GREY);
+        doc.text(u.rightText, pw - mr, ty, { align: 'right' });
+        ty += 6;
+        setFont('normal', 10, DARK);
+        doc.splitTextToSize(u.desc, rw).forEach(line => { doc.text(line, rx, ty); ty += 5; });
+        ty += 2;
+        // Photos in the right column, one per row
+        u.photos.forEach((photo, pi) => {
+          const box = photoHeightAt(photo, colWr, photoH);
           try {
-            const slotX = ml + ci * (colW + 5);
-            const x = slotX + (colW - box.w) / 2;
-            doc.addImage(photo.dataUrl, 'JPEG', x, y, box.w, box.h, '', 'FAST');
+            doc.addImage(photo.dataUrl, 'JPEG', rx, ty, box.w, box.h, '', 'FAST');
             setFont('normal', 7, GREY);
-            doc.text(`${u.itemNum} — Photo ${pi + ci + 1}`, slotX, y + rowH + 4);
+            doc.text(`${u.itemNum} — Photo ${pi + 1}`, rx, ty + box.h + 4);
           } catch(e) {}
+          ty += box.h + ROW_GAP;
         });
-        y += rowH + ROW_GAP;
+        y = top + besideBlockHeight(u, photoH);
+      } else {
+        // Excerpt on its own row (multi-item room)
+        if (u.isFirstInRoom && u.roomExcerpt) {
+          const ex = u.roomExcerpt;
+          try {
+            doc.addImage(ex.dataUrl, 'JPEG', ml, y, ex.w, ex.h, '', 'FAST');
+            setFont('bold', 9, DARK);
+            doc.text('Location', ml, y - 2);
+          } catch(e) {}
+          y += ex.h + 4;
+        }
+        // Item header
+        setFont('bold', 10, DARK);
+        doc.text(`${u.flagged ? '⚑ ' : ''}${u.itemNum}`, ml, y);
+        setFont('normal', 9, GREY);
+        doc.text(u.rightText, pw - mr, y, { align: 'right' });
+        y += 6;
+        // Description
+        setFont('normal', 10, DARK);
+        u.descLines.forEach(line => { doc.text(line, ml, y); y += 5; });
+        y += 2;
+        // Photos — pairs share the width, lone photo in one column
+        for (let pi = 0; pi < u.photos.length; pi += 2) {
+          const rowPhotos = [u.photos[pi], u.photos[pi + 1]].filter(Boolean);
+          const wCap = rowWidthCap(rowPhotos);
+          const boxes = rowPhotos.map(p => photoHeightAt(p, wCap, photoH));
+          const rowH = Math.max(...boxes.map(b => b.h));
+          rowPhotos.forEach((photo, ci) => {
+            const box = boxes[ci];
+            try {
+              const slotX = ml + ci * (colW + 5);
+              const x = slotX + (colW - box.w) / 2;
+              doc.addImage(photo.dataUrl, 'JPEG', x, y, box.w, box.h, '', 'FAST');
+              setFont('normal', 7, GREY);
+              doc.text(`${u.itemNum} — Photo ${pi + ci + 1}`, slotX, y + rowH + 4);
+            } catch(e) {}
+          });
+          y += rowH + ROW_GAP;
+        }
       }
 
       // Thin rule between items in the same room

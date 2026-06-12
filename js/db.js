@@ -1,6 +1,6 @@
 // Native IndexedDB wrapper — no npm dependency required
 const DB_NAME = 'sitenote-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance = null;
 
@@ -30,6 +30,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings', { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains('plans')) {
+        db.createObjectStore('plans', { keyPath: 'id' }); // id = jobId
       }
     };
     req.onsuccess = e => { dbInstance = e.target.result; resolve(dbInstance); };
@@ -169,6 +172,7 @@ export async function deleteJob(id) {
     for (const p of photos) await del('photos', p.id);
     await del('items', item.id);
   }
+  try { await del('plans', id); } catch(e) {}
   await del('jobs', id);
 }
 
@@ -193,16 +197,22 @@ export async function getAllPhotosForJob(jobId) { return getAllByIndex('photos',
 export async function savePhoto(photo) { await put('photos', photo); }
 export async function deletePhoto(id) { await del('photos', id); }
 
+// ── Plan (imported drawing) per job ──
+export async function getPlan(jobId) { return getOne('plans', jobId); }
+export async function savePlan(plan) { await put('plans', plan); }
+export async function deletePlan(jobId) { await del('plans', jobId); }
+
 export async function getAllTemplates() { return getAll('templates'); }
 export async function saveTemplate(template) { await put('templates', template); }
 export async function deleteTemplate(id) { await del('templates', id); }
 
-// Export a single job bundle (job + its items + photos) for transfer to another device
+// Export a single job bundle (job + its items + photos + plan) for transfer
 export async function exportJobBundle(jobId) {
   const job = await getOne('jobs', jobId);
   const items = await getAllByIndex('items', 'jobId', jobId);
   const photos = await getAllByIndex('photos', 'jobId', jobId);
-  return { type: 'sitenote-job', version: 1, job, items, photos };
+  const plan = await getOne('plans', jobId);
+  return { type: 'sitenote-job', version: 1, job, items, photos, plan: plan || null };
 }
 
 // Import a single job bundle (merge — overwrites by id, does NOT clear other data)
@@ -211,18 +221,19 @@ export async function importJobBundle(bundle) {
   await put('jobs', bundle.job);
   for (const it of (bundle.items || [])) await put('items', it);
   for (const ph of (bundle.photos || [])) await put('photos', ph);
+  if (bundle.plan) await put('plans', bundle.plan);
   return bundle.job.id;
 }
 
 export async function exportAllData() {
-  const [jobs, items, photos, templates, settings] = await Promise.all([
-    getAll('jobs'), getAll('items'), getAll('photos'), getAll('templates'), getAll('settings')
+  const [jobs, items, photos, templates, settings, plans] = await Promise.all([
+    getAll('jobs'), getAll('items'), getAll('photos'), getAll('templates'), getAll('settings'), getAll('plans')
   ]);
-  return { jobs, items, photos, templates, settings };
+  return { jobs, items, photos, templates, settings, plans };
 }
 
 export async function importAllData(data) {
-  for (const store of ['jobs', 'items', 'photos', 'templates', 'settings']) {
+  for (const store of ['jobs', 'items', 'photos', 'templates', 'settings', 'plans']) {
     await clearStore(store);
     if (data[store]) {
       for (const item of data[store]) await put(store, item);
@@ -231,7 +242,7 @@ export async function importAllData(data) {
 }
 
 export async function clearAllData() {
-  for (const store of ['jobs', 'items', 'photos', 'templates', 'settings']) {
+  for (const store of ['jobs', 'items', 'photos', 'templates', 'settings', 'plans']) {
     await clearStore(store);
   }
 }

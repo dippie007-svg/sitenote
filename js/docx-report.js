@@ -139,6 +139,21 @@ export async function generateDOCX(jobId) {
     }));
     firstRoom = false;
 
+    // Plan excerpt for orientation (if marked)
+    if (room.excerpt && room.excerptW && room.excerptH) {
+      try {
+        const w = 170;
+        const h = Math.round(w * (room.excerptH / room.excerptW));
+        children.push(new Paragraph({
+          spacing: { after: 60 },
+          children: [
+            new TextRun({ text: 'Location: ', bold: true, size: 20, color: DARK }),
+            new ImageRun({ type: 'jpg', data: dataUrlToUint8(room.excerpt), transformation: { width: w, height: h } })
+          ]
+        }));
+      } catch (e) {}
+    }
+
     for (let idx = 0; idx < roomItems.length; idx++) {
       const item = roomItems[idx];
       const itemNum = `${code}-${String(idx + 1).padStart(2, '0')}`;
