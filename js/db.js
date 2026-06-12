@@ -162,6 +162,55 @@ export async function getAllJobs() {
   return all.sort((a, b) => b.createdAt - a.createdAt);
 }
 
+// Duplicate a job (rooms, items, photos, plan) into a brand-new job.
+// overrides: { reference, date, now }. Items keep their content but are reset to
+// unresolved so the new report starts with everything outstanding.
+export async function duplicateJob(sourceId, overrides = {}) {
+  const src = await getOne('jobs', sourceId);
+  if (!src) throw new Error('Source job not found');
+  const srcItems = await getAllByIndex('items', 'jobId', sourceId);
+  const srcPhotos = await getAllByIndex('photos', 'jobId', sourceId);
+  const srcPlan = await getOne('plans', sourceId);
+
+  const newJobId = crypto.randomUUID();
+  const now = overrides.now || Date.now();
+
+  // Map old → new ids
+  const itemIdMap = {};
+  srcItems.forEach(it => { itemIdMap[it.id] = crypto.randomUUID(); });
+  const photoIdMap = {};
+  srcPhotos.forEach(p => { photoIdMap[p.id] = crypto.randomUUID(); });
+
+  const newJob = {
+    ...src,
+    id: newJobId,
+    reference: overrides.reference || src.reference,
+    date: overrides.date || src.date,
+    status: 'in-progress',
+    rooms: (src.rooms || []).map(r => ({ ...r })),  // keep room ids + plan excerpts
+    createdAt: now,
+    updatedAt: now
+  };
+  await put('jobs', newJob);
+
+  for (const it of srcItems) {
+    const newItem = {
+      ...it,
+      id: itemIdMap[it.id],
+      jobId: newJobId,
+      resolved: false,
+      photoIds: (it.photoIds || []).map(pid => photoIdMap[pid]).filter(Boolean)
+    };
+    await put('items', newItem);
+  }
+  for (const p of srcPhotos) {
+    await put('photos', { ...p, id: photoIdMap[p.id], jobId: newJobId, itemId: itemIdMap[p.itemId] });
+  }
+  if (srcPlan) await put('plans', { ...srcPlan, id: newJobId });
+
+  return newJobId;
+}
+
 export async function saveJob(job) { await put('jobs', job); }
 export async function getJob(id) { return getOne('jobs', id); }
 

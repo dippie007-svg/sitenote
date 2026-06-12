@@ -109,7 +109,7 @@ function createItemCard(item, room) {
   const sevClass = { critical:'sev-critical', high:'sev-high', medium:'sev-medium', low:'sev-low' }[item.severity] || 'sev-medium';
 
   const card = document.createElement('div');
-  card.className = 'item-card';
+  card.className = 'item-card' + (item.resolved ? ' resolved' : '');
   card.dataset.id = item.id;
   card.innerHTML = `
     <div class="item-card-body">
@@ -117,6 +117,7 @@ function createItemCard(item, room) {
         <span class="item-num mono">${item.flagged ? '⚑ ' : ''}${itemNum}</span>
         <span class="badge ${sevClass}">${item.severity || 'medium'}</span>
         ${item.trade ? `<span class="trade-pill">${esc(item.trade)}</span>` : ''}
+        ${item.resolved ? '<span class="badge badge-success">Resolved</span>' : ''}
         <span class="photo-count">${(item.photoIds||[]).length > 0 ? `📷 ${item.photoIds.length}` : ''}</span>
       </div>
       <div class="item-desc">${esc((item.description||'').slice(0,80))}</div>
@@ -141,11 +142,13 @@ function updateNavButtons() {
   document.getElementById('capture-prev-room').disabled = currentRoomIndex === 0;
   const nextBtn = document.getElementById('capture-next-room');
   if (currentRoomIndex === rooms.length - 1) {
+    // Last room → highlighted "Finish & Review" button
     nextBtn.textContent = 'Finish & Review →';
-    nextBtn.classList.add('btn-finish');
+    nextBtn.classList.add('btn-primary', 'btn-finish');
   } else {
+    // More rooms to go → plain button, matching the "Prev" button
     nextBtn.textContent = 'Next Room →';
-    nextBtn.classList.remove('btn-finish');
+    nextBtn.classList.remove('btn-primary', 'btn-finish');
   }
 }
 
@@ -240,6 +243,7 @@ async function openItemPanel(item) {
   // Populate form
   document.getElementById('item-description').value = editingItem.description || '';
   document.getElementById('item-flagged').checked = !!editingItem.flagged;
+  document.getElementById('item-resolved').checked = !!editingItem.resolved;
 
   // Severity
   document.querySelectorAll('.sev-btn').forEach(btn => {
@@ -389,6 +393,7 @@ function saveOriginalToGallery(file) {
 async function saveItemPanel() {
   editingItem.description = document.getElementById('item-description').value.trim();
   editingItem.flagged = document.getElementById('item-flagged').checked;
+  editingItem.resolved = document.getElementById('item-resolved').checked;
 
   // Save new photos to DB
   const newPhotos = editingPhotos.filter(p => p.id.startsWith('new-'));

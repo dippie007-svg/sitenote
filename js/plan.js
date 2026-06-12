@@ -23,23 +23,67 @@ export function initPlan() {
   document.getElementById('plan-zoom-out').addEventListener('click', () => zoomBy(0.8));
 
   const stage = document.getElementById('plan-stage');
-  // Tap to place marker (ignore drags)
-  let down = null, moved = false;
-  stage.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; moved = false; });
-  stage.addEventListener('pointermove', e => {
-    if (!down) return;
-    if (Math.abs(e.clientX - down.x) > 5 || Math.abs(e.clientY - down.y) > 5) {
-      moved = true;
-      panX += e.clientX - down.x; panY += e.clientY - down.y;
-      down = { x: e.clientX, y: e.clientY };
-      applyTransform();
+  // Pointer handling: 1 pointer = pan / tap-to-place, 2 pointers = pinch-zoom
+  const pointers = new Map();   // pointerId -> {x, y}
+  let moved = false;
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function midpoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+
+  stage.addEventListener('pointerdown', e => {
+    stage.setPointerCapture?.(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    moved = false;
+    if (pointers.size === 2) {
+      const [p1, p2] = [...pointers.values()];
+      pinchStartDist = dist(p1, p2);
+      pinchStartScale = scale;
     }
   });
-  stage.addEventListener('pointerup', e => {
-    if (down && !moved) placeMarkerFromEvent(e);
-    down = null;
+
+  stage.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.size >= 2) {
+      // Pinch-zoom around the midpoint of the two fingers
+      moved = true;
+      const [p1, p2] = [...pointers.values()];
+      const d = dist(p1, p2);
+      if (pinchStartDist > 0) {
+        const newScale = Math.max(0.1, pinchStartScale * (d / pinchStartDist));
+        const mid = midpoint(p1, p2);
+        const rect = stage.getBoundingClientRect();
+        const mx = mid.x - rect.left, my = mid.y - rect.top;
+        // keep the midpoint anchored while scaling
+        const k = newScale / scale;
+        panX = mx - (mx - panX) * k;
+        panY = my - (my - panY) * k;
+        scale = newScale;
+        applyTransform();
+      }
+    } else {
+      // Single-finger pan
+      const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        moved = true;
+        panX += dx; panY += dy;
+        applyTransform();
+      }
+    }
   });
-  stage.addEventListener('pointercancel', () => { down = null; });
+
+  function endPointer(e) {
+    const wasOne = pointers.size === 1;
+    pointers.delete(e.pointerId);
+    if (wasOne && !moved) placeMarkerFromEvent(e);
+    if (pointers.size < 2) pinchStartDist = 0;
+  }
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); pinchStartDist = 0; });
 }
 
 export async function openPlan(theJob, currentRoomIndex, savedCb) {

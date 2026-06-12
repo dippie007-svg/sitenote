@@ -124,7 +124,7 @@ export async function generateDOCX(jobId) {
   let firstRoom = true;
   for (const room of (job.rooms || [])) {
     const roomItems = allItems
-      .filter(i => i.roomId === room.id)
+      .filter(i => i.roomId === room.id && !i.resolved)   // resolved items excluded from report
       .sort((a, b) => (a.order || 0) - (b.order || 0));
     if (!roomItems.length) continue;
 

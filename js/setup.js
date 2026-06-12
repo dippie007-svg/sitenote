@@ -47,8 +47,9 @@ export function initSetup() {
       }
       document.getElementById('setup-template-name-row').style.display = 'block';
     } else {
-      document.getElementById('setup-title').textContent = 'New Job';
-      document.getElementById('setup-start-btn').textContent = 'Start Inspection';
+      // Editing an existing job vs. creating a new one
+      document.getElementById('setup-title').textContent = currentJobId ? 'Edit Job' : 'New Job';
+      document.getElementById('setup-start-btn').textContent = currentJobId ? 'Save' : 'Start Inspection';
       document.getElementById('setup-job-fields').style.display = 'block';
       document.getElementById('setup-template-row').style.display = 'flex';
       document.getElementById('setup-template-name-row').style.display = 'none';
@@ -162,23 +163,30 @@ async function startInspection() {
   const client = document.getElementById('setup-client').value.trim();
   if (!client) { showToast('Project name is required', 'error'); return; }
 
+  // When editing, preserve the existing job's status, createdAt and any extra fields
+  const existing = currentJobId ? await getJob(currentJobId) : null;
+
   const job = {
+    ...(existing || {}),
     id: currentJobId || generateId(),
     reference: document.getElementById('setup-ref').value.trim(),
     clientName: client,
     address: document.getElementById('setup-address').value.trim(),
     date: document.getElementById('setup-date').value,
     reportType: document.getElementById('setup-type').value,
-    status: 'in-progress',
+    status: existing ? existing.status : 'in-progress',
     rooms: rooms.map((r, i) => ({ ...r, order: i })),
-    createdAt: currentJobId ? undefined : Date.now(),
+    createdAt: existing ? existing.createdAt : Date.now(),
     updatedAt: Date.now()
   };
 
-  if (!currentJobId) job.createdAt = Date.now();
-
   await saveJob(job);
-  navigate('capture', { jobId: job.id });
+  if (existing) {
+    showToast('Job saved', 'success');
+    navigate('review', { jobId: job.id });
+  } else {
+    navigate('capture', { jobId: job.id });
+  }
 }
 
 async function saveAsTemplate() {

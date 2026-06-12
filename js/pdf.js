@@ -186,7 +186,7 @@ export async function generatePDF(jobId) {
   const units = [];
   for (const room of rooms) {
     const roomItems = allItems
-      .filter(i => i.roomId === room.id)
+      .filter(i => i.roomId === room.id && !i.resolved)   // resolved items excluded from report
       .sort((a, b) => (a.order || 0) - (b.order || 0));
     const code = getRoomCode(room.name);
     // Plan excerpt for this room (shown under the room heading)
@@ -397,7 +397,7 @@ export async function generatePDF(jobId) {
 
   // ─── Summary table ───
   if (settings.reportPrefs?.summaryTable !== false) {
-    const criticalHigh = allItems.filter(i => i.severity === 'critical' || i.severity === 'high');
+    const criticalHigh = allItems.filter(i => !i.resolved && (i.severity === 'critical' || i.severity === 'high'));
     if (criticalHigh.length) {
       doc.addPage();
       y = mt;
@@ -408,7 +408,7 @@ export async function generatePDF(jobId) {
       const tableRows = criticalHigh.map(item => {
         const room = rooms.find(r => r.id === item.roomId);
         const code = room ? getRoomCode(room.name) : '?';
-        const roomItems = allItems.filter(i => i.roomId === item.roomId).sort((a,b)=>(a.order||0)-(b.order||0));
+        const roomItems = allItems.filter(i => i.roomId === item.roomId && !i.resolved).sort((a,b)=>(a.order||0)-(b.order||0));
         const num = roomItems.findIndex(i => i.id === item.id) + 1;
         return [
           `${code}-${String(num).padStart(2,'0')}`,

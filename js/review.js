@@ -16,6 +16,10 @@ export function initReview() {
   document.getElementById('review-tab-trade').addEventListener('click', () => setView('trade'));
 
   document.getElementById('review-menu-btn').addEventListener('click', toggleOverflowMenu);
+  document.getElementById('review-add-items-btn').addEventListener('click', () => {
+    toggleOverflowMenu();
+    navigate('capture', { jobId: job.id });
+  });
   document.getElementById('review-edit-job-btn').addEventListener('click', () => {
     toggleOverflowMenu();
     navigate('setup', { jobId: job.id });
@@ -78,19 +82,18 @@ function renderReview() {
 
 function renderSummaryBar() {
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-  items.forEach(i => { if (counts[i.severity] !== undefined) counts[i.severity]++; });
-  const roomsComplete = (job.rooms || []).filter(r => {
-    const ri = items.filter(i => i.roomId === r.id);
-    return ri.length > 0;
-  }).length;
+  // Severity counts reflect OUTSTANDING (unresolved) items — what the report shows
+  items.filter(i => !i.resolved).forEach(i => { if (counts[i.severity] !== undefined) counts[i.severity]++; });
+  const outstanding = items.filter(i => !i.resolved).length;
+  const resolved = items.filter(i => i.resolved).length;
 
   document.getElementById('review-summary').innerHTML = `
     <span class="sev-chip sev-critical">Critical: ${counts.critical}</span>
     <span class="sev-chip sev-high">High: ${counts.high}</span>
     <span class="sev-chip sev-medium">Medium: ${counts.medium}</span>
     <span class="sev-chip sev-low">Low: ${counts.low}</span>
-    <span class="sev-chip">Total: ${items.length}</span>
-    <span class="sev-chip">Rooms: ${roomsComplete}/${(job.rooms||[]).length}</span>
+    <span class="sev-chip">Outstanding: ${outstanding}</span>
+    ${resolved ? `<span class="sev-chip">Resolved: ${resolved}</span>` : ''}
   `;
 }
 
@@ -153,7 +156,7 @@ function createReviewCard(item, room, idx) {
   const sevClass = { critical:'sev-critical', high:'sev-high', medium:'sev-medium', low:'sev-low' }[item.severity] || 'sev-medium';
 
   const card = document.createElement('div');
-  card.className = 'review-item-card';
+  card.className = 'review-item-card' + (item.resolved ? ' resolved' : '');
   card.dataset.id = item.id;
 
   const aiBtn = isAIEnabled() ? `<button class="btn btn-sm ai-btn" data-ai="${item.id}">✦ Expand</button>` : '';
@@ -163,16 +166,24 @@ function createReviewCard(item, room, idx) {
       <span class="item-num mono">${item.flagged ? '⚑ ' : ''}${itemNum}</span>
       <span class="badge ${sevClass}">${item.severity || 'medium'}</span>
       ${item.trade ? `<span class="trade-pill">${esc(item.trade)}</span>` : ''}
+      ${item.resolved ? '<span class="badge badge-success">Resolved</span>' : ''}
     </div>
     <div class="review-item-desc">${esc(item.description || '')}</div>
     <div class="review-item-photos" data-item="${item.id}"></div>
     <div class="review-item-actions">
+      <button class="btn btn-sm resolve-btn${item.resolved ? ' active' : ''}" data-resolve="${item.id}">${item.resolved ? '↩ Reopen' : '✓ Resolve'}</button>
       <button class="btn btn-sm flag-btn${item.flagged ? ' active' : ''}" data-flag="${item.id}">⚑ ${item.flagged ? 'Flagged' : 'Flag'}</button>
       ${aiBtn}
       <button class="btn btn-sm" data-edit="${item.id}">Edit</button>
       <button class="btn btn-sm btn-danger" data-delete="${item.id}">Delete</button>
     </div>
   `;
+
+  card.querySelector(`[data-resolve]`).addEventListener('click', async () => {
+    item.resolved = !item.resolved;
+    await saveItem(item);
+    renderReview();
+  });
 
   card.querySelector(`[data-flag]`).addEventListener('click', async () => {
     item.flagged = !item.flagged;
@@ -385,7 +396,7 @@ async function expandWithAI(item, inPanel = false) {
 }
 
 function handleGenerateReport() {
-  if (!items.length) { showToast('No items to include in report', 'error'); return; }
+  if (!items.filter(i => !i.resolved).length) { showToast('No outstanding items to include in report', 'error'); return; }
   // Ask which format
   document.getElementById('format-modal-overlay').style.display = 'flex';
 }
@@ -434,7 +445,7 @@ function exportCSV() {
   const rows = [['Item', 'Room', 'Description', 'Trade', 'Severity', 'Flagged']];
   (job.rooms || []).forEach(room => {
     const code = getRoomCode(room.name);
-    const roomItems = items.filter(i => i.roomId === room.id).sort((a,b)=>(a.order||0)-(b.order||0));
+    const roomItems = items.filter(i => i.roomId === room.id && !i.resolved).sort((a,b)=>(a.order||0)-(b.order||0));
     roomItems.forEach((item, idx) => {
       const num = `${code}-${String(idx+1).padStart(2,'0')}`;
       rows.push([num, room.name, item.description || '', item.trade || '', item.severity || 'medium', item.flagged ? 'Yes' : 'No']);
