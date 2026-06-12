@@ -642,6 +642,11 @@ select option { background: var(--surface); }
 .photo-include-label { display: none; }
 .review-item-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .flag-btn.active { background: #3a2510; color: #f08030; }
+.resolve-btn.active { background: #1e3a28; color: var(--success); }
+.review-item-card.resolved { opacity: 0.55; }
+.review-item-card.resolved .review-item-desc { text-decoration: line-through; }
+.item-card.resolved { opacity: 0.55; }
+.item-card.resolved .item-desc { text-decoration: line-through; }
 
 #review-summary {
   display: flex;
