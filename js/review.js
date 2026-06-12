@@ -244,7 +244,6 @@ function openEditPanel(item) {
 
 function renderEditPanel() {
   document.getElementById('review-edit-desc').value = editPanelItem.description || '';
-  document.getElementById('review-edit-flagged').checked = !!editPanelItem.flagged;
   document.querySelectorAll('.review-sev-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.sev === (editPanelItem.severity || 'medium'));
   });
@@ -296,7 +295,6 @@ export function initReviewPanel() {
 
   document.getElementById('review-edit-panel-save').addEventListener('click', async () => {
     editPanelItem.description = document.getElementById('review-edit-desc').value.trim();
-    editPanelItem.flagged = document.getElementById('review-edit-flagged').checked;
 
     const newPhotos = editPanelPhotos.filter(p => p.id && p.id.startsWith('new-'));
     for (const p of newPhotos) {

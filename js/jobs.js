@@ -1,6 +1,6 @@
-import { getAllJobs, deleteJob, getAllTemplates, saveTemplate, deleteTemplate, getItemsForJob, importJobBundle } from './db.js';
+import { getAllJobs, deleteJob, getAllTemplates, saveTemplate, deleteTemplate, getItemsForJob, importJobBundle, duplicateJob } from './db.js';
 import { navigate } from './router.js';
-import { showToast, generateId } from './utils.js';
+import { showToast, generateId, generateJobRef } from './utils.js';
 
 
 export function initJobs() {
@@ -76,7 +76,8 @@ function createJobCard(job, itemCount) {
       <div class="job-card-header">
         <span class="job-ref mono">${job.reference || ''}</span>
         <span class="badge ${statusClass}">${statusLabel}</span>
-        <button class="btn-icon delete-job-btn" data-id="${job.id}" title="Delete job" style="margin-left:auto;color:var(--danger)">🗑</button>
+        <button class="btn-icon base-job-btn" data-id="${job.id}" title="Use report as base" style="margin-left:auto">⎘</button>
+        <button class="btn-icon delete-job-btn" data-id="${job.id}" title="Delete job" style="color:var(--danger)">🗑</button>
       </div>
       <div class="job-card-client">${esc(job.clientName)}</div>
       <div class="job-card-address">${esc(job.address || '')}</div>
@@ -88,10 +89,21 @@ function createJobCard(job, itemCount) {
     </div>
   `;
 
-  // Tap card to navigate (ignore taps on the delete button)
+  // Tap card to navigate (ignore taps on the action buttons)
   card.querySelector('.job-card-main').addEventListener('click', e => {
-    if (e.target.closest('.delete-job-btn')) return;
+    if (e.target.closest('.delete-job-btn') || e.target.closest('.base-job-btn')) return;
     navigate(job.status === 'complete' ? 'review' : 'capture', { jobId: job.id });
+  });
+
+  card.querySelector('.base-job-btn').addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!confirm(`Use "${job.reference}" as a base?\nA new report will be created with the same details and today's date.`)) return;
+    const jobs = await getAllJobs();
+    const reference = generateJobRef(jobs);
+    const date = new Date().toISOString().slice(0, 10);
+    const newId = await duplicateJob(job.id, { reference, date, now: Date.now() });
+    showToast('New report created from base', 'success');
+    navigate('capture', { jobId: newId });
   });
 
   card.querySelector('.delete-job-btn').addEventListener('click', async e => {

@@ -242,7 +242,6 @@ async function openItemPanel(item) {
 
   // Populate form
   document.getElementById('item-description').value = editingItem.description || '';
-  document.getElementById('item-flagged').checked = !!editingItem.flagged;
   document.getElementById('item-resolved').checked = !!editingItem.resolved;
 
   // Severity
@@ -392,7 +391,6 @@ function saveOriginalToGallery(file) {
 
 async function saveItemPanel() {
   editingItem.description = document.getElementById('item-description').value.trim();
-  editingItem.flagged = document.getElementById('item-flagged').checked;
   editingItem.resolved = document.getElementById('item-resolved').checked;
 
   // Save new photos to DB
