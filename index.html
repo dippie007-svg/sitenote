@@ -114,6 +114,14 @@
           <ul class="rooms-list" id="rooms-list"></ul>
           <button class="btn btn-sm" id="add-room-btn" style="margin-top:0.5rem;width:100%">+ Add Room</button>
         </div>
+
+        <!-- Trade categories (per job) -->
+        <div id="setup-trades-block" style="margin-top:1.25rem">
+          <label class="form-label">Trade Categories</label>
+          <small style="color:var(--text-muted);display:block;margin-bottom:0.75rem">These appear as tags when capturing items for this job.</small>
+          <ul class="trades-list" id="setup-trades-list"></ul>
+          <button class="btn btn-sm" id="setup-add-trade-btn" style="margin-top:0.5rem;width:100%">+ Add Trade</button>
+        </div>
       </div>
       <div class="setup-actions">
         <button class="btn" id="setup-cancel-btn">Cancel</button>
@@ -298,11 +306,6 @@
             <label class="form-label">Phone</label>
             <input type="tel" id="setting-phone" placeholder="+44 7700 900000">
           </div>
-          <div class="form-group">
-            <label class="form-label">Logo</label>
-            <input type="file" id="logo-upload" accept="image/*">
-            <img id="logo-preview" alt="Logo preview">
-          </div>
         </div>
 
         <div class="settings-section">
@@ -318,13 +321,6 @@
               <small style="color:var(--text-muted);font-size:0.8rem">Your key is stored only on this device.</small>
             </div>
           </div>
-        </div>
-
-        <div class="settings-section">
-          <h2>Trade Categories</h2>
-          <small style="color:var(--text-muted);display:block;margin-bottom:0.75rem">These appear as tags when capturing items on site.</small>
-          <ul class="trades-list" id="trades-list"></ul>
-          <button class="btn btn-sm" id="add-trade-btn">+ Add Trade</button>
         </div>
 
         <div class="settings-section">
