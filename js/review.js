@@ -256,7 +256,7 @@ function renderEditPanel() {
 function renderEditTrades() {
   const container = document.getElementById('review-edit-trades');
   container.innerHTML = '';
-  const trades = (settings && settings.trades) || [];
+  const trades = (job && job.trades) || [];
   trades.forEach(trade => {
     const pill = document.createElement('button');
     pill.className = `trade-pill-btn${editPanelItem.trade === trade ? ' active' : ''}`;

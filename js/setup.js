@@ -3,6 +3,7 @@ import { navigate, goBack } from './router.js';
 import { generateId, generateJobRef, showToast } from './utils.js';
 
 let rooms = [];
+let trades = [];
 let currentJobId = null;
 let isTemplateMode = false;
 let editingTemplateId = null;
@@ -13,6 +14,7 @@ export function initSetup() {
   document.getElementById('setup-start-btn').addEventListener('click', startInspection);
   document.getElementById('add-room-btn').addEventListener('click', () => addRoom(''));
   document.getElementById('save-template-btn').addEventListener('click', saveAsTemplate);
+  document.getElementById('setup-add-trade-btn').addEventListener('click', () => addTrade(''));
 
   document.getElementById('setup-template-select').addEventListener('change', async e => {
     const val = e.target.value;
@@ -34,6 +36,8 @@ export function initSetup() {
       document.getElementById('setup-start-btn').textContent = 'Save Template';
       document.getElementById('setup-job-fields').style.display = 'none';
       document.getElementById('setup-template-row').style.display = 'none';
+      document.getElementById('setup-trades-block').style.display = 'none';  // trades are per-job, not per-template
+      trades = [];
       if (editingTemplateId) {
         const templates = await getAllTemplates();
         const t = templates.find(t => t.id === editingTemplateId);
@@ -53,16 +57,19 @@ export function initSetup() {
       document.getElementById('setup-job-fields').style.display = 'block';
       document.getElementById('setup-template-row').style.display = 'flex';
       document.getElementById('setup-template-name-row').style.display = 'none';
+      document.getElementById('setup-trades-block').style.display = 'block';
 
       if (currentJobId) {
         const job = await getJob(currentJobId);
-        if (job) populateJobForm(job);
+        if (job) { populateJobForm(job); trades = (job.trades || []).slice(); }
       } else {
         resetJobForm();
+        trades = [];
       }
       await populateTemplateSelect();
     }
     renderRooms();
+    renderTrades();
   });
 }
 
@@ -143,8 +150,46 @@ function syncRoomNamesFromDOM() {
   });
 }
 
+// ── Trade categories (per job) ──
+function addTrade(name) {
+  trades.push(name || '');
+  renderTrades();
+  const inputs = document.querySelectorAll('.trade-name-input');
+  if (inputs.length) { const last = inputs[inputs.length - 1]; last.focus(); last.select(); }
+}
+
+function renderTrades() {
+  const list = document.getElementById('setup-trades-list');
+  if (!list) return;
+  list.innerHTML = '';
+  trades.forEach((trade, i) => {
+    const li = document.createElement('li');
+    li.className = 'trade-item';
+    li.innerHTML = `
+      <input class="trade-name-input trade-input" value="${esc(trade)}" placeholder="Trade name" data-index="${i}">
+      <button class="btn-icon trade-delete-btn" data-index="${i}" aria-label="Remove trade">✕</button>
+    `;
+    li.querySelector('.trade-name-input').addEventListener('input', e => {
+      trades[+e.target.dataset.index] = e.target.value;
+    });
+    li.querySelector('.trade-delete-btn').addEventListener('click', e => {
+      trades.splice(+e.currentTarget.dataset.index, 1);
+      renderTrades();
+    });
+    list.appendChild(li);
+  });
+}
+
+function syncTradesFromDOM() {
+  document.querySelectorAll('.trade-name-input').forEach(input => {
+    const i = +input.dataset.index;
+    if (trades[i] !== undefined) trades[i] = input.value;
+  });
+}
+
 async function startInspection() {
   syncRoomNamesFromDOM();
+  syncTradesFromDOM();
   if (isTemplateMode) {
     const name = document.getElementById('setup-template-name').value.trim();
     if (!name) { showToast('Template name required', 'error'); return; }
@@ -176,6 +221,7 @@ async function startInspection() {
     reportType: document.getElementById('setup-type').value,
     status: existing ? existing.status : 'in-progress',
     rooms: rooms.map((r, i) => ({ ...r, order: i })),
+    trades: trades.map(t => t.trim()).filter(Boolean),
     createdAt: existing ? existing.createdAt : Date.now(),
     updatedAt: Date.now()
   };

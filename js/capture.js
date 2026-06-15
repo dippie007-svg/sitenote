@@ -269,9 +269,9 @@ function closeItemPanel() {
 function renderTradePills() {
   const container = document.getElementById('item-trades-container');
   container.innerHTML = '';
-  const trades = (settings && settings.trades) ? settings.trades : [];
+  const trades = (job && job.trades) ? job.trades : [];
   if (!trades.length) {
-    container.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem">Add trades in Settings</span>';
+    container.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem">Add trades in the job details (Edit Job)</span>';
     return;
   }
   trades.forEach(trade => {
