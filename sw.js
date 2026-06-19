@@ -1,5 +1,5 @@
-const CACHE = 'sitenote-v39';
-const STATIC = ['./logo-dvm.jpg', './icon-192.png', './icon-512.png', './js/vendor/docx.umd.js'];
+const CACHE = 'sitenote-v41';
+const STATIC = ['./logo-dvm.jpg', './icon-192.png', './icon-512.png', './js/vendor/docx.umd.js', './js/vendor/pdf.min.js', './js/vendor/pdf.worker.min.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

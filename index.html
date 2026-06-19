@@ -19,6 +19,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <!-- docx (self-hosted) for Word report export — exposes window.docx -->
   <script src="js/vendor/docx.umd.js"></script>
+  <!-- pdf.js (self-hosted) for importing PDF floor plans — exposes window.pdfjsLib -->
+  <script src="js/vendor/pdf.min.js"></script>
+  <script>if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js'; }</script>
 </head>
 <body data-theme="dark">
 
@@ -410,14 +413,14 @@
     <button class="btn-icon" id="plan-close">✕</button>
   </div>
   <div class="plan-modal-tools">
-    <input type="file" id="plan-import-input" accept="image/*" style="display:none">
+    <input type="file" id="plan-import-input" accept="image/*,application/pdf,.pdf" style="display:none">
     <button class="btn btn-sm" id="plan-import-btn">Import drawing</button>
     <button class="btn btn-sm" id="plan-zoom-out">−</button>
     <button class="btn btn-sm" id="plan-zoom-in">+</button>
     <button class="btn btn-sm" id="plan-clear-btn">Clear pin</button>
     <button class="btn btn-sm btn-primary" id="plan-save-btn">Save</button>
   </div>
-  <div id="plan-empty" class="plan-empty-msg">No drawing imported yet. Tap “Import drawing” to add a floor plan, then tap on it to mark this room.</div>
+  <div id="plan-empty" class="plan-empty-msg">No drawing imported yet. Tap “Import drawing” to add a floor plan (image or PDF), then tap on it to mark this room.</div>
   <div id="plan-stage" class="plan-stage-box">
     <div id="plan-zoomwrap" class="plan-zoomwrap"></div>
   </div>
