@@ -108,18 +108,55 @@ function closePlan() {
 async function handleImport(e) {
   const file = e.target.files[0];
   if (!file) return;
-  if (file.type === 'application/pdf') {
-    showToast('Please export the plan as an image (PNG/JPG) and import that.', 'info');
-    e.target.value = ''; return;
+  try {
+    let result;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      result = await renderPdfToImage(file);
+    } else {
+      result = await resizeImage(file, 2000, 0.85);
+    }
+    plan = { id: job.id, dataUrl: result.dataUrl, w: result.w, h: result.h };
+    await savePlan(plan);
+    scale = 1; panX = 0; panY = 0;
+    await renderPlan();
+    showToast('Drawing imported', 'success');
+  } catch (err) {
+    showToast(`Import failed: ${err.message || err}`, 'error');
   }
-  // Resize large plans to a reasonable max so storage/render stays fast
-  const { dataUrl, w, h } = await resizeImage(file, 2000, 0.85);
-  plan = { id: job.id, dataUrl, w, h };
-  await savePlan(plan);
-  scale = 1; panX = 0; panY = 0;
-  await renderPlan();
-  showToast('Drawing imported', 'success');
   e.target.value = '';
+}
+
+// Render a PDF page to a JPEG dataUrl (page 1 by default; prompts if multi-page)
+async function renderPdfToImage(file) {
+  if (!window.pdfjsLib) throw new Error('PDF library not loaded');
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+
+  let pageNum = 1;
+  if (pdf.numPages > 1) {
+    const ans = prompt(`This PDF has ${pdf.numPages} pages. Which page is the floor plan?`, '1');
+    if (ans === null) throw new Error('Cancelled');
+    const n = parseInt(ans, 10);
+    if (n >= 1 && n <= pdf.numPages) pageNum = n;
+  }
+
+  const page = await pdf.getPage(pageNum);
+  // Scale so the longest side is ~2000px for a crisp but compact plan
+  const base = page.getViewport({ scale: 1 });
+  const target = 2000;
+  const scaleFactor = target / Math.max(base.width, base.height);
+  const viewport = page.getViewport({ scale: scaleFactor });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d');
+  // White background (PDFs are transparent) so the plan looks right
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), w: canvas.width, h: canvas.height };
 }
 
 function loadImg(src) {
@@ -241,24 +278,31 @@ function cropExcerpt() {
   if (!planImg || !marker) return null;
   const cw = Math.round(plan.w * EXCERPT_FRAC);
   const ch = Math.round(plan.h * EXCERPT_FRAC);
-  let cx = Math.round(marker.xPct * plan.w - cw / 2);
-  let cy = Math.round(marker.yPct * plan.h - ch / 2);
-  cx = Math.max(0, Math.min(cx, plan.w - cw));
-  cy = Math.max(0, Math.min(cy, plan.h - ch));
+
+  // Marker position in plan pixels
+  const mx0 = marker.xPct * plan.w;
+  const my0 = marker.yPct * plan.h;
 
   const canvas = document.createElement('canvas');
   canvas.width = cw; canvas.height = ch;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(planImg, cx, cy, cw, ch, 0, 0, cw, ch);
 
-  // Draw a marker dot at the centre of the excerpt
+  // White background so any area beyond the plan edge stays clean
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Draw the whole plan shifted so the marker lands exactly in the centre.
+  // (Near edges the crop simply shows white padding — the pin stays centred.)
+  const destX = cw / 2 - mx0;
+  const destY = ch / 2 - my0;
+  ctx.drawImage(planImg, destX, destY, plan.w, plan.h);
+
+  // Marker dot in the dead centre of the excerpt
   ctx.fillStyle = 'rgba(240,165,0,0.9)';
   ctx.strokeStyle = '#1a1f2e';
   ctx.lineWidth = Math.max(2, cw / 80);
-  const mx = marker.xPct * plan.w - cx;
-  const my = marker.yPct * plan.h - cy;
   const r = Math.max(6, cw / 25);
-  ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cw / 2, ch / 2, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-  return { dataUrl: canvas.toDataURL('image/jpeg', 0.8), w: cw, h: ch };
+  return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), w: cw, h: ch };
 }
